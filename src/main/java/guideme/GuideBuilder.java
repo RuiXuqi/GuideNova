@@ -1,5 +1,6 @@
 package guideme;
 
+import guideme.compiler.IdUtils;
 import guideme.extensions.Extension;
 import guideme.extensions.ExtensionCollection;
 import guideme.extensions.ExtensionPoint;
@@ -17,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -47,7 +48,7 @@ public class GuideBuilder {
         this.id = Objects.requireNonNull(id, "id");
         this.defaultNamespace = id.getNamespace();
         this.folder = "guides/" + id.getNamespace() + "/" + id.getPath();
-        this.startPage = new ResourceLocation(defaultNamespace, "index.md");
+        this.startPage = IdUtils.build(defaultNamespace, "index.md");
 
         // Development sources folder
         var devSourcesFolderProperty = getSystemPropertyName(id, "sources");
@@ -86,7 +87,7 @@ public class GuideBuilder {
      */
     public GuideBuilder defaultNamespace(String defaultNamespace) {
         // Both folder and default namespace need to be valid resource paths
-        if (!ResourceLocation.isValidNamespace(defaultNamespace)) {
+        if (!IdUtils.isValidNamespace(defaultNamespace)) {
             throw new IllegalArgumentException("The default namespace for a guide needs to be a valid namespace");
         }
         this.defaultNamespace = defaultNamespace;
@@ -102,7 +103,7 @@ public class GuideBuilder {
      * implicitly make it unique.
      */
     public GuideBuilder folder(String folder) {
-        if (!ResourceLocation.isValidPath(folder)) {
+        if (!IdUtils.isValidPath(folder)) {
             throw new IllegalArgumentException("The folder for a guide needs to be a valid resource location");
         }
         this.folder = folder;
@@ -223,6 +224,9 @@ public class GuideBuilder {
     /**
      * Configure the generic guide item provided by GuideME. If you are using this code API to register your guide, you
      * are encouraged to register your own guide item instead of using the generic one.
+     * <p>
+     * Guides using a custom {@link GuideItemSettings#itemModel()} must be registered before client model loading.
+     * Otherwise, falling back to base model is expected.
      */
     public GuideBuilder itemSettings(GuideItemSettings settings) {
         this.itemSettings = settings;

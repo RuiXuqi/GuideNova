@@ -2,7 +2,7 @@ package guideme.scene.annotation;
 
 import guideme.color.ColorValue;
 import java.util.OptionalDouble;
-import net.minecraft.core.BlockPos;
+import net.minecraft.util.math.BlockPos;
 import org.apache.commons.lang3.tuple.Pair;
 import org.joml.Intersectionf;
 import org.joml.Matrix4f;

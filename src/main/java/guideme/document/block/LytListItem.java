@@ -6,7 +6,6 @@ import guideme.document.LytRect;
 import guideme.layout.LayoutContext;
 import guideme.render.RenderContext;
 import guideme.style.ResolvedTextStyle;
-import net.minecraft.client.renderer.MultiBufferSource;
 
 public class LytListItem extends LytVBox {
 
@@ -32,7 +31,7 @@ public class LytListItem extends LytVBox {
     }
 
     @Override
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
+    public void render(RenderContext context) {
         if (isOrdered()) {
             int number = getOrderedItemNumber();
             String label = number + ".";
@@ -41,12 +40,19 @@ public class LytListItem extends LytVBox {
             var bounds = getBounds();
             var x = bounds.x() + LEVEL_MARGIN - width - 2;
 
-            context.renderTextInBatch(label,
-                    style,
-                    x, (float) bounds.y(), buffers);
+            context.renderText(label, style, x, (float) bounds.y());
+        } else {
+            var bounds = getBounds();
+
+            context.fillRect(
+                    bounds.x() + 5,
+                    bounds.y() + 4,
+                    2,
+                    2,
+                    SymbolicColor.BODY_TEXT);
         }
 
-        super.renderBatch(context, buffers);
+        super.render(context);
     }
 
     private int getOrderedItemNumber() {
@@ -64,21 +70,5 @@ public class LytListItem extends LytVBox {
             }
         }
         return number;
-    }
-
-    @Override
-    public void render(RenderContext context) {
-        if (!isOrdered()) {
-            var bounds = getBounds();
-
-            context.fillRect(
-                    bounds.x() + 5,
-                    bounds.y() + 4,
-                    2,
-                    2,
-                    SymbolicColor.BODY_TEXT);
-        }
-
-        super.render(context);
     }
 }

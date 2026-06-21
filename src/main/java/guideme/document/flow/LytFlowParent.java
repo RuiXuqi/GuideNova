@@ -3,9 +3,7 @@ package guideme.document.flow;
 import guideme.compiler.PageCompiler;
 import guideme.document.LytErrorSink;
 import guideme.libs.unist.UnistNode;
-import java.util.Optional;
-import net.minecraft.network.chat.FormattedText;
-import net.minecraft.network.chat.Style;
+import net.minecraft.util.text.ITextComponent;
 
 public interface LytFlowParent extends LytErrorSink {
     void append(LytFlowContent child);
@@ -20,9 +18,10 @@ public interface LytFlowParent extends LytErrorSink {
     /**
      * Converts formatted Minecraft text into our flow content.
      */
-    default void appendComponent(FormattedText formattedText) {
-        formattedText.visit((style, text) -> {
-            if (style.isEmpty()) {
+    default void appendComponent(ITextComponent formattedText) {
+        for (ITextComponent node : formattedText) {
+            String text = node.getUnformattedComponentText();
+            if (text.isEmpty()) {
                 appendText(text);
             } else {
                 var span = new LytFlowSpan();
@@ -30,8 +29,7 @@ public interface LytFlowParent extends LytErrorSink {
                 span.appendText(text);
                 append(span);
             }
-            return Optional.empty();
-        }, Style.EMPTY);
+        }
     }
 
     default void appendBreak() {

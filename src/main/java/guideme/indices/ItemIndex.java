@@ -5,9 +5,8 @@ import guideme.compiler.IdUtils;
 import guideme.compiler.ParsedGuidePage;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.ResourceLocationException;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,13 +45,13 @@ public class ItemIndex extends UniqueIndex<ResourceLocation, PageAnchor> {
                 ResourceLocation itemId;
                 try {
                     itemId = IdUtils.resolveId(itemIdStr, page.getId().getNamespace());
-                } catch (ResourceLocationException e) {
+                } catch (IdUtils.ResourceLocationException e) {
                     LOG.warn("Page {} contains a malformed item_ids frontmatter entry: {}", page.getId(),
                             listEntry);
                     continue;
                 }
 
-                if (BuiltInRegistries.ITEM.containsKey(itemId)) {
+                if (ForgeRegistries.ITEMS.containsKey(itemId)) {
                     // add a link to the top of the page
                     itemAnchors.add(Pair.of(
                             itemId, new PageAnchor(page.getId(), null)));

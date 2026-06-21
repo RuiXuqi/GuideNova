@@ -1,28 +1,39 @@
 package guideme.internal.data;
 
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.TextComponentTranslation;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 public interface LocalizationEnum {
 
-    String getEnglishText();
-
     String getTranslationKey();
 
-    default MutableComponent text() {
-        return Component.translatable(getTranslationKey());
+    @SideOnly(Side.CLIENT)
+    default String str() {
+        return I18n.format(getTranslationKey());
     }
 
-    default MutableComponent text(Object... args) {
-        return Component.translatable(getTranslationKey(), args);
+    @SideOnly(Side.CLIENT)
+    default String str(Object... args) {
+        return I18n.format(getTranslationKey(), args);
     }
 
-    default MutableComponent withSuffix(String text) {
-        return text().copy().append(text);
+    default ITextComponent text() {
+        return new TextComponentTranslation(getTranslationKey());
     }
 
-    default MutableComponent withSuffix(Component text) {
-        return text().copy().append(text);
+    default ITextComponent text(Object... args) {
+        return new TextComponentTranslation(getTranslationKey(), args);
+    }
+
+    default ITextComponent withSuffix(String text) {
+        return text().createCopy().appendText(text);
+    }
+
+    default ITextComponent withSuffix(ITextComponent text) {
+        return text().createCopy().appendSibling(text);
     }
 
 }

@@ -7,7 +7,7 @@ import guideme.document.LytErrorSink;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.scene.GuidebookScene;
 import java.util.Set;
-import net.minecraft.core.BlockPos;
+import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -23,18 +23,12 @@ public class BlockAnnotationElementCompiler extends AnnotationTagCompiler {
     }
 
     @Override
-    protected @Nullable SceneAnnotation createAnnotation(PageCompiler compiler, LytErrorSink errorSink,
-            MdxJsxElementFields el) {
-        return createAnnotation(null, compiler, errorSink, el, BlockPos.ZERO);
-    }
-
-    @Override
     protected @Nullable SceneAnnotation createAnnotation(GuidebookScene scene, PageCompiler compiler,
             LytErrorSink errorSink, MdxJsxElementFields el, BlockPos instancePosition) {
         var pos = MdxAttrs.getPos(compiler, errorSink, el);
         var color = MdxAttrs.getColor(compiler, errorSink, el, "color", ConstantColor.WHITE);
 
-        pos = pos.offset(instancePosition);
+        pos = pos.add(instancePosition);
 
         return InWorldBoxAnnotation.forBlock(pos, color);
     }

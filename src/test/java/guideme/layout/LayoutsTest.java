@@ -8,7 +8,6 @@ import guideme.document.block.LytBlock;
 import guideme.render.RenderContext;
 import java.util.List;
 import java.util.stream.Stream;
-import net.minecraft.client.renderer.MultiBufferSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -59,10 +58,6 @@ public class LayoutsTest {
 
         @Override
         protected void onLayoutMoved(int deltaX, int deltaY) {
-        }
-
-        @Override
-        public void renderBatch(RenderContext context, MultiBufferSource buffers) {
         }
 
         @Override
@@ -145,10 +140,11 @@ public class LayoutsTest {
         var result = Layouts.horizontalLayout(
                 testCase.context,
                 testCase.children,
-                testCase.x, testCase.y, testCase.availableWidth,
+                testCase.x, testCase.y, testCase.availableWidth, false,
                 testCase.paddingLeft, testCase.paddingTop, testCase.paddingRight, testCase.paddingBottom,
                 testCase.gap,
-                AlignItems.START);
+                AlignItems.START,
+                true);
         assertEquals(testCase.expectedOutput, result, "outer bounds are not as expected");
 
         for (int i = 0; i < testCase.children.size(); i++) {

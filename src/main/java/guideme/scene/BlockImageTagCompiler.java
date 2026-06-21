@@ -8,7 +8,7 @@ import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.libs.mdast.model.MdAstNode;
 import guideme.scene.level.GuidebookLevel;
 import java.util.Set;
-import net.minecraft.core.BlockPos;
+import net.minecraft.util.math.BlockPos;
 
 /**
  * Handles tags like <code>&lt;BlockImage id="mod:blockid" /&gt;</code> and renders a 3D block image in its place.
@@ -35,7 +35,7 @@ public class BlockImageTagCompiler extends BlockTagCompiler {
             return;
         }
 
-        var state = pair.getRight().defaultBlockState();
+        var state = pair.getRight().getDefaultState();
         state = MdxAttrs.applyBlockStateProperties(compiler, parent, el, state);
 
         var level = new GuidebookLevel();
@@ -44,7 +44,7 @@ public class BlockImageTagCompiler extends BlockTagCompiler {
         cameraSettings.setPerspectivePreset(perspective);
 
         var scene = new GuidebookScene(level, cameraSettings);
-        level.setBlockAndUpdate(BlockPos.ZERO, state);
+        level.setBlockState(BlockPos.ORIGIN, state);
         scene.centerScene();
 
         var lytScene = new LytGuidebookScene(compiler.getExtensions());

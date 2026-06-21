@@ -11,17 +11,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.util.EnumBlockRenderType;
+import net.minecraft.util.EnumFacing;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Intersectionf;
 import org.joml.Matrix4f;
@@ -89,7 +83,7 @@ public class GuidebookScene {
         var max = new Vector3f(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY);
         level.getFilledBlocks().forEach(pos -> {
             var state = level.getBlockState(pos);
-            if (!state.hasBlockEntity() && state.getRenderShape() == RenderShape.INVISIBLE) {
+            if (!state.getBlock().hasTileEntity(state) && state.getRenderType() == EnumBlockRenderType.INVISIBLE) {
                 return; // Skip invisible blocks (i.e. minecraft:light)
             }
 
@@ -109,7 +103,7 @@ public class GuidebookScene {
         });
 
         for (var entity : level.getEntitiesForRendering()) {
-            var bounds = entity.getBoundingBox();
+            var bounds = entity.getEntityBoundingBox();
 
             for (var xCorner = 0; xCorner <= 1; xCorner++) {
                 for (var yCorner = 0; yCorner <= 1; yCorner++) {
@@ -181,7 +175,8 @@ public class GuidebookScene {
      * actually have dimensions in the 3d scene, making it necessary to know the viewport.
      */
     @Nullable
-    public SceneAnnotation pickAnnotation(LytPoint point, LytRect viewport,
+    public SceneAnnotation pickAnnotation(
+            LytPoint point, LytRect viewport,
             Predicate<? super SceneAnnotation> predicate) {
         var screenPos = documentToScreen(viewport, point);
 
@@ -195,8 +190,8 @@ public class GuidebookScene {
     }
 
     @Nullable
-    public OverlayAnnotation pickOverlayAnnotation(LytPoint point,
-            LytRect viewport,
+    public OverlayAnnotation pickOverlayAnnotation(
+            LytPoint point, LytRect viewport,
             Predicate<? super OverlayAnnotation> predicate) {
         for (int i = overlayAnnotations.size() - 1; i >= 0; i--) {
             var annotation = overlayAnnotations.get(i);
@@ -213,8 +208,8 @@ public class GuidebookScene {
     }
 
     @Nullable
-    public InWorldAnnotation pickInWorldAnnotation(float screenX,
-            float screenY,
+    public InWorldAnnotation pickInWorldAnnotation(
+            float screenX, float screenY,
             Predicate<? super InWorldAnnotation> predicate) {
         // Check overlay annotations first
 
@@ -241,7 +236,7 @@ public class GuidebookScene {
         return pickedBox;
     }
 
-    public BlockHitResult pickBlock(LytPoint point, LytRect viewport) {
+    public RayTraceResult pickBlock(LytPoint point, LytRect viewport) {
         var screenPos = documentToScreen(viewport, point);
 
         var rayOrigin = new Vector3f();
@@ -256,36 +251,21 @@ public class GuidebookScene {
                 new Vector3f(levelBounds.min().getX(), levelBounds.min().getY(), levelBounds.min().getZ()),
                 new Vector3f(levelBounds.max().getX(), levelBounds.max().getY(), levelBounds.max().getZ()),
                 intersection)) {
-            return BlockHitResult.miss(Vec3.ZERO, Direction.UP, BlockPos.ZERO);
+            return new RayTraceResult(RayTraceResult.Type.MISS, Vec3d.ZERO, EnumFacing.UP, BlockPos.ORIGIN);
         }
 
         // Move the ray such that the start and end are on the bounding box of the content
         var start = new Vector3f(rayDir).mulAdd(intersection.x, rayOrigin);
         var end = new Vector3f(rayDir).mulAdd(intersection.y, rayOrigin);
+        var fromVec3 = new Vec3d(start.x, start.y, start.z);
+        var toVec3 = new Vec3d(end.x, end.y, end.z);
+        var result = level.rayTraceBlocks(fromVec3, toVec3, true, false, false);
+        if (result != null)
+            return result;
 
-        var fromVec3 = new Vec3(start);
-        var toVec3 = new Vec3(end);
-        var blockClipContext = ClipContext.Block.OUTLINE;
-        var fluidClipContext = ClipContext.Fluid.ANY;
-        return BlockGetter.traverseBlocks(fromVec3, toVec3, null, (ignored, blockPos) -> {
-            BlockState blockState = level.getBlockState(blockPos);
-            FluidState fluidState = level.getFluidState(blockPos);
-
-            var blockShape = blockClipContext.get(blockState, level, blockPos, CollisionContext.empty());
-            var blockHit = level.clipWithInteractionOverride(fromVec3, toVec3, blockPos, blockShape, blockState);
-
-            var fluidShape = fluidClipContext.canPick(fluidState) ? fluidState.getShape(level, blockPos)
-                    : Shapes.empty();
-            var fluidHit = fluidShape.clip(fromVec3, toVec3, blockPos);
-
-            double blockDist = blockHit == null ? Double.MAX_VALUE : fromVec3.distanceToSqr(blockHit.getLocation());
-            double fluidDist = fluidHit == null ? Double.MAX_VALUE : fromVec3.distanceToSqr(fluidHit.getLocation());
-            return blockDist <= fluidDist ? blockHit : fluidHit;
-        }, ignored -> {
-            Vec3 vec3 = fromVec3.subtract(toVec3);
-            return BlockHitResult.miss(toVec3, Direction.getNearest(vec3.x, vec3.y, vec3.z),
-                    BlockPos.containing(toVec3));
-        });
+        var missDirection = EnumFacing.getFacingFromVector((float) (fromVec3.x - toVec3.x),
+                (float) (fromVec3.y - toVec3.y), (float) (fromVec3.z - toVec3.z));
+        return new RayTraceResult(RayTraceResult.Type.MISS, toVec3, missDirection, new BlockPos(toVec3));
     }
 
     public Stream<BlockPos> getFilledBlocks() {
@@ -314,7 +294,7 @@ public class GuidebookScene {
         });
         var tmp = new Vector3f();
         for (var entity : level.getEntitiesForRendering()) {
-            var bounds = entity.getBoundingBox();
+            var bounds = entity.getEntityBoundingBox();
             tmp.set(bounds.minX, bounds.minY, bounds.minZ);
             min.min(tmp);
             tmp.set(bounds.maxX, bounds.maxY, bounds.maxZ);

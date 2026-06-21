@@ -1,7 +1,8 @@
 package guideme;
 
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
+import guideme.compiler.IdUtils;
+import guideme.internal.network.ExtendedBuffer;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -20,10 +21,10 @@ public record PageAnchor(ResourceLocation pageId, @Nullable String anchor) {
         ResourceLocation pageId = null;
         String fragment = null;
         if (sep != -1) {
-            pageId = new ResourceLocation(anchor.substring(0, sep));
+            pageId = IdUtils.parse(anchor.substring(0, sep));
             fragment = anchor.substring(sep + 1);
         } else {
-            pageId = new ResourceLocation(anchor);
+            pageId = IdUtils.parse(anchor);
         }
         return new PageAnchor(pageId, fragment);
     }
@@ -37,14 +38,14 @@ public record PageAnchor(ResourceLocation pageId, @Nullable String anchor) {
         }
     }
 
-    public static PageAnchor read(FriendlyByteBuf buffer) {
+    public static PageAnchor read(ExtendedBuffer buffer) {
         var pageId = buffer.readResourceLocation();
-        var anchor = buffer.readNullable(FriendlyByteBuf::readUtf);
+        var anchor = buffer.readNullable(ExtendedBuffer::readString);
         return new PageAnchor(pageId, anchor);
     }
 
-    public static void write(FriendlyByteBuf buffer, PageAnchor anchor) {
+    public static void write(ExtendedBuffer buffer, PageAnchor anchor) {
         buffer.writeResourceLocation(anchor.pageId);
-        buffer.writeNullable(anchor.anchor, FriendlyByteBuf::writeUtf);
+        buffer.writeNullable(anchor.anchor, ExtendedBuffer::writeString);
     }
 }

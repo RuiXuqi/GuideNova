@@ -1,27 +1,28 @@
 package guideme.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import guideme.color.ARGB;
 import guideme.color.LightDarkMode;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
+import org.lwjgl.opengl.GL11;
 
 /**
  * Helper to build and draw a layer of sprites in a single draw-call.
  */
 final class SpriteLayer {
     private final ResourceLocation atlasLocation;
+    private final Tessellator tess;
     private BufferBuilder builder;
 
     public SpriteLayer() {
         atlasLocation = GuiAssets.GUI_SPRITE_ATLAS;
-        builder = Tesselator.getInstance().getBuilder();
-        builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        tess = Tessellator.getInstance();
+        builder = tess.getBuffer();
+        builder.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX_COLOR);
     }
 
     public void fillSprite(ResourceLocation id, float x, float y, float z, float width, float height, int color) {
@@ -38,17 +39,16 @@ final class SpriteLayer {
         var guiSprite = GuiAssets.sprite(id);
         var scaling = guiSprite.spriteScaling();
         var sprite = guiSprite.atlasSprite(LightDarkMode.current());
-        var u0 = sprite.getU0();
-        var u1 = sprite.getU1();
-        var v0 = sprite.getV0();
-        var v1 = sprite.getV1();
-        if (scaling instanceof GuiSpriteScaling.Tile tiled) {
-            fillTiled(x, y, z, width, height, color, tiled.width(), tiled.height(), u0, u1, v0, v1, fillDirection);
-        } else if (scaling instanceof GuiSpriteScaling.Stretch stretch) {
+        var u0 = sprite.getMinU();
+        var u1 = sprite.getMaxU();
+        var v0 = sprite.getMinV();
+        var v1 = sprite.getMaxV();
+        if (scaling instanceof GuiSpriteScaling.Tile(int width1, int height1)) {
+            fillTiled(x, y, z, width, height, color, width1, height1, u0, u1, v0, v1, fillDirection);
+        } else if (scaling instanceof GuiSpriteScaling.Stretch) {
             addQuad(x, y, z, width, height, color, u0, u1, v0, v1);
-        } else if (scaling instanceof GuiSpriteScaling.NineSlice nineSlice) {
-            addTiledNineSlice(id, x, y, z, width, height, color, nineSlice.width(), nineSlice.height(),
-                    nineSlice.border(), u0, u1, v0, v1);
+        } else if (scaling instanceof GuiSpriteScaling.NineSlice(int width1, int height1, GuiSpriteScaling.NineSlice.Border border)) {
+            addTiledNineSlice(id, x, y, z, width, height, color, width1, height1, border, u0, u1, v0, v1);
         }
     }
 
@@ -162,33 +162,29 @@ final class SpriteLayer {
             return;
         }
 
-        builder.vertex(x, y, z).uv(minU, minV).color(color).endVertex();
-        builder.vertex(x, y + height, z).uv(minU, maxV).color(color).endVertex();
-        builder.vertex(x + width, y + height, z).uv(maxU, maxV).color(color).endVertex();
-        builder.vertex(x + width, y, z).uv(maxU, minV).color(color).endVertex();
+        int red = ARGB.red(color);
+        int green = ARGB.green(color);
+        int blue = ARGB.blue(color);
+        int alpha = ARGB.alpha(color);
+
+        builder.pos(x, y, z).tex(minU, minV).color(red, green, blue, alpha).endVertex();
+        builder.pos(x, y + height, z).tex(minU, maxV).color(red, green, blue, alpha).endVertex();
+        builder.pos(x + width, y + height, z).tex(maxU, maxV).color(red, green, blue, alpha).endVertex();
+        builder.pos(x + width, y, z).tex(maxU, minV).color(red, green, blue, alpha).endVertex();
     }
 
-    public void render(PoseStack poseStack, int x, int y, int z) {
+    public void render(int x, int y, int z) {
         if (builder == null) {
             throw new IllegalStateException("Already rendered.");
         }
 
-        var meshData = builder.endOrDiscardIfEmpty();
         builder = null;
-        if (meshData == null) {
-            return;
-        }
-        RenderSystem.enableBlend();
-        RenderSystem.enableDepthTest();
-        RenderSystem.setShaderTexture(0, atlasLocation);
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        var modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.pushPose();
-        modelViewStack.mulPoseMatrix(poseStack.last().pose());
-        modelViewStack.translate(x, y, z);
-        RenderSystem.applyModelViewMatrix();
-        BufferUploader.drawWithShader(meshData);
-        modelViewStack.popPose();
-        RenderSystem.applyModelViewMatrix();
+        GlStateManager.enableBlend();
+        GlStateManager.enableDepth();
+        Minecraft.getMinecraft().getTextureManager().bindTexture(atlasLocation);
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(x, y, z);
+        tess.draw();
+        GlStateManager.popMatrix();
     }
 }

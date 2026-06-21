@@ -3,7 +3,7 @@ package guideme.internal.util;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.Set;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 

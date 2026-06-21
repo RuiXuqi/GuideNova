@@ -22,10 +22,10 @@ public class SceneBlockElementCompiler implements SceneElementTagCompiler {
         if (pair == null) {
             return;
         }
-        var state = pair.getRight().defaultBlockState();
+        var state = pair.getRight().getDefaultState();
         state = MdxAttrs.applyBlockStateProperties(compiler, errorSink, el, state);
 
         var pos = MdxAttrs.getPos(compiler, errorSink, el);
-        scene.getLevel().setBlockAndUpdate(pos, state);
+        scene.getLevel().setBlockState(pos, state);
     }
 }

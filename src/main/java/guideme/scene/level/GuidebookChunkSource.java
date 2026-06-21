@@ -2,60 +2,43 @@ package guideme.scene.level;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import java.util.function.BooleanSupplier;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.ChunkSource;
-import net.minecraft.world.level.chunk.ChunkStatus;
-import net.minecraft.world.level.lighting.LevelLightEngine;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.IChunkProvider;
 import org.jetbrains.annotations.Nullable;
 
-class GuidebookChunkSource extends ChunkSource {
+class GuidebookChunkSource implements IChunkProvider {
     private final GuidebookLevel level;
 
     private final Long2ObjectMap<GuidebookChunk> chunks = new Long2ObjectOpenHashMap<>();
 
-    private final LevelLightEngine lightEngine;
-
     public GuidebookChunkSource(GuidebookLevel level) {
         this.level = level;
-        this.lightEngine = new LevelLightEngine(this, true, true);
     }
 
     @Nullable
     @Override
-    public ChunkAccess getChunk(int chunkX, int chunkZ, ChunkStatus requiredStatus, boolean load) {
-        var chunkKey = ChunkPos.asLong(chunkX, chunkZ);
-        var chunk = chunks.get(chunkKey);
-        if (chunk == null) {
-            chunk = new GuidebookChunk(level, new ChunkPos(chunkX, chunkZ));
-            chunks.put(chunkKey, chunk);
-        }
-        return chunk;
+    public Chunk getLoadedChunk(int x, int z) {
+        return chunks.get(ChunkPos.asLong(x, z));
     }
 
     @Override
-    public void tick(BooleanSupplier booleanSupplier, boolean bl) {
+    public Chunk provideChunk(int x, int z) {
+        return chunks.computeIfAbsent(ChunkPos.asLong(x, z), ignored -> new GuidebookChunk(level, x, z));
     }
 
     @Override
-    public String gatherStats() {
-        return "";
+    public boolean tick() {
+        return false;
     }
 
     @Override
-    public int getLoadedChunksCount() {
-        return 0;
+    public String makeString() {
+        return "GuidebookChunkSource: " + chunks.size();
     }
 
     @Override
-    public LevelLightEngine getLightEngine() {
-        return lightEngine;
-    }
-
-    @Override
-    public BlockGetter getLevel() {
-        return level;
+    public boolean isChunkGeneratedAt(int x, int z) {
+        return chunks.containsKey(ChunkPos.asLong(x, z));
     }
 }

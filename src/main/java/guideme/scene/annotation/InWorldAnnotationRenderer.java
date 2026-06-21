@@ -1,63 +1,81 @@
 package guideme.scene.annotation;
 
-import com.mojang.blaze3d.platform.GlConst;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import guideme.color.ARGB;
 import guideme.color.LightDarkMode;
 import guideme.color.MutableColor;
-import guideme.internal.GuideME;
+import guideme.internal.GuideMEClient;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderStateShard;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.core.Direction;
-import net.minecraft.util.FastColor;
+import net.minecraft.client.renderer.texture.TextureMap;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.EnumFacing;
 import org.joml.Vector3f;
+import org.lwjgl.opengl.GL11;
 
 public final class InWorldAnnotationRenderer {
-
-    private static final RenderType OCCLUDED = RenderType.create(
-            "annotation_occluded",
-            DefaultVertexFormat.BLOCK,
-            VertexFormat.Mode.QUADS,
-            0x100000,
-            false,
-            true,
-            RenderType.CompositeState.builder()
-                    .setLightmapState(RenderType.LIGHTMAP)
-                    .setShaderState(RenderType.RENDERTYPE_TRANSLUCENT_SHADER)
-                    .setTextureState(RenderStateShard.BLOCK_SHEET_MIPPED)
-                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
-                    .setDepthTestState(RenderStateShard.GREATER_DEPTH_TEST)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
-                    .createCompositeState(false));
 
     private InWorldAnnotationRenderer() {
     }
 
-    public static void render(MultiBufferSource.BufferSource buffers, Iterable<InWorldAnnotation> annotations,
-            LightDarkMode lightDarkMode) {
-        var sprite = Minecraft.getInstance().getTextureAtlas(TextureAtlas.LOCATION_BLOCKS)
-                .apply(GuideME.makeId("block/noise"));
+    public static void render(Iterable<InWorldAnnotation> annotations, LightDarkMode lightDarkMode) {
+        var mc = Minecraft.getMinecraft();
+        var sprite = mc.getTextureMapBlocks().getAtlasSprite(GuideMEClient.NOISE_ID.toString());
 
-        var occludedConsumer = buffers.getBuffer(OCCLUDED);
+        mc.getTextureManager().bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
+        GlStateManager.enableTexture2D();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(
+                GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
+                GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ZERO);
+        GlStateManager.disableLighting();
+
+        GlStateManager.depthFunc(GL11.GL_GREATER);
+        GlStateManager.depthMask(false);
+        renderPass(annotations, lightDarkMode, sprite, false, true);
+
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        GlStateManager.depthMask(false);
+        renderPass(annotations, lightDarkMode, sprite, false, false);
+
+        GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
+        renderPass(annotations, lightDarkMode, sprite, true, false);
+
+        GlStateManager.depthMask(true);
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        GlStateManager.enableLighting();
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    private static void renderPass(
+            Iterable<InWorldAnnotation> annotations,
+            LightDarkMode lightDarkMode,
+            TextureAtlasSprite sprite,
+            boolean alwaysOnTop,
+            boolean occluded) {
+        var tess = Tessellator.getInstance();
+        var buffer = tess.getBuffer();
+        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX_COLOR_NORMAL);
+
         for (var annotation : annotations) {
-            if (annotation.isAlwaysOnTop()) {
+            if (annotation.isAlwaysOnTop() != alwaysOnTop) {
+                continue;
+            }
+            if (occluded && annotation.isAlwaysOnTop()) {
                 continue; // Don't render occlusion for always-on-top annotations
             }
 
             if (annotation instanceof InWorldBoxAnnotation boxAnnotation) {
                 var color = MutableColor.of(boxAnnotation.color(), lightDarkMode);
-                color.darker(50).setAlpha(color.alpha() * 0.5f);
+                if (occluded) {
+                    color.darker(50).setAlpha(color.alpha() * 0.5f);
+                }
                 if (boxAnnotation.isHovered()) {
                     color.lighter(50);
                 }
-                render(occludedConsumer,
+                render(buffer,
                         boxAnnotation.min(),
                         boxAnnotation.max(),
                         color.toArgb32(),
@@ -65,11 +83,13 @@ public final class InWorldAnnotationRenderer {
                         sprite);
             } else if (annotation instanceof InWorldLineAnnotation lineAnnotation) {
                 var color = MutableColor.of(lineAnnotation.color(), lightDarkMode);
-                color.darker(50).setAlpha(color.alpha() * 0.5f);
+                if (occluded) {
+                    color.darker(50).setAlpha(color.alpha() * 0.5f);
+                }
                 if (lineAnnotation.isHovered()) {
                     color.lighter(50);
                 }
-                strut(occludedConsumer,
+                strut(buffer,
                         lineAnnotation.min(),
                         lineAnnotation.max(),
                         color.toArgb32(),
@@ -79,53 +99,11 @@ public final class InWorldAnnotationRenderer {
                         sprite);
             }
         }
-        buffers.endBatch(OCCLUDED);
 
-        for (var pass = 1; pass <= 2; pass++) {
-            if (pass == 2) {
-                RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-            }
-
-            var consumer = buffers.getBuffer(RenderType.translucent());
-
-            for (var annotation : annotations) {
-                if (annotation.isAlwaysOnTop() != (pass == 2)) {
-                    continue;
-                }
-
-                if (annotation instanceof InWorldBoxAnnotation boxAnnotation) {
-                    var color = MutableColor.of(boxAnnotation.color(), lightDarkMode);
-                    if (boxAnnotation.isHovered()) {
-                        color.lighter(50);
-                    }
-                    render(consumer,
-                            boxAnnotation.min(),
-                            boxAnnotation.max(),
-                            color.toArgb32(),
-                            boxAnnotation.thickness(),
-                            sprite);
-                } else if (annotation instanceof InWorldLineAnnotation lineAnnotation) {
-                    var color = MutableColor.of(lineAnnotation.color(), lightDarkMode);
-                    if (lineAnnotation.isHovered()) {
-                        color.lighter(50);
-                    }
-                    strut(consumer,
-                            lineAnnotation.min(),
-                            lineAnnotation.max(),
-                            color.toArgb32(),
-                            lineAnnotation.thickness(),
-                            true,
-                            true,
-                            sprite);
-                }
-            }
-
-            buffers.endBatch(RenderType.translucent());
-        }
-        buffers.endBatch();
+        tess.draw();
     }
 
-    public static void render(VertexConsumer consumer,
+    public static void render(BufferBuilder consumer,
             Vector3f min,
             Vector3f max,
             int color,
@@ -182,7 +160,7 @@ public final class InWorldAnnotationRenderer {
                 new Vector3f(tNorm).mulAdd(-thickHalf, corners[4]), color, thickness, false, false, sprite);
     }
 
-    private static void strut(VertexConsumer consumer, Vector3f from, Vector3f to, int color, float thickness,
+    private static void strut(BufferBuilder consumer, Vector3f from, Vector3f to, int color, float thickness,
             boolean startCap, boolean endCap, TextureAtlasSprite sprite) {
         var norm = new Vector3f(to).sub(from).normalize();
         Vector3f prefUp;
@@ -250,35 +228,35 @@ public final class InWorldAnnotationRenderer {
                 sprite);
     }
 
-    private static void quad(VertexConsumer consumer, Vector3f faceNormal, int color,
+    private static void quad(BufferBuilder consumer, Vector3f faceNormal, int color,
             Vector3f v1, Vector3f v2, Vector3f v3, Vector3f v4,
             TextureAtlasSprite sprite) {
-        var d = Direction.getNearest(faceNormal.x, faceNormal.y, faceNormal.z);
+        var d = EnumFacing.getFacingFromVector(faceNormal.x, faceNormal.y, faceNormal.z);
         var shade = switch (d) {
             case DOWN -> 0.5F;
             case NORTH, SOUTH -> 0.8F;
             case WEST, EAST -> 0.6F;
             default -> 1.0F;
         };
-        color = FastColor.ARGB32.multiply(
-                FastColor.ARGB32.color(255, (int) (shade * 255), (int) (shade * 255), (int) (shade * 255)),
+        color = ARGB.multiply(
+                ARGB.color(255, (int) (shade * 255), (int) (shade * 255), (int) (shade * 255)),
                 color);
 
-        vertex(consumer, faceNormal, color, v1, sprite.getU0(), sprite.getV1());
-        vertex(consumer, faceNormal, color, v2, sprite.getU0(), sprite.getV0());
-        vertex(consumer, faceNormal, color, v3, sprite.getU1(), sprite.getV0());
-        vertex(consumer, faceNormal, color, v4, sprite.getU1(), sprite.getV1());
+        vertex(consumer, faceNormal, color, v1, sprite.getMinU(), sprite.getMaxV());
+        vertex(consumer, faceNormal, color, v2, sprite.getMinU(), sprite.getMinV());
+        vertex(consumer, faceNormal, color, v3, sprite.getMaxU(), sprite.getMinV());
+        vertex(consumer, faceNormal, color, v4, sprite.getMaxU(), sprite.getMaxV());
     }
 
-    private static void vertex(VertexConsumer consumer,
+    private static void vertex(BufferBuilder consumer,
             Vector3f faceNormal,
             int color,
             Vector3f bottomLeft,
             float u, float v) {
-        consumer.vertex(bottomLeft.x, bottomLeft.y, bottomLeft.z)
-                .color(color)
-                .uv(u, v)
-                .uv2(LightTexture.FULL_BRIGHT)
+        consumer.pos(bottomLeft.x, bottomLeft.y, bottomLeft.z)
+                .tex(u, v)
+                .color(ARGB.red(color), ARGB.green(color),
+                        ARGB.blue(color), ARGB.alpha(color))
                 .normal(faceNormal.x(), faceNormal.y(), faceNormal.z())
                 .endVertex();
     }

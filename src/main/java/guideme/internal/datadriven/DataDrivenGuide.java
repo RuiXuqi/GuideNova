@@ -1,49 +1,55 @@
 package guideme.internal.datadriven;
 
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import guideme.GuideItemSettings;
 import guideme.color.ConstantColor;
-import java.util.Locale;
+import guideme.internal.util.JsonParseUtil;
+import java.util.HashMap;
 import java.util.Map;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.JsonUtils;
+import net.minecraft.util.ResourceLocation;
 
 /**
  * Format for data driven guide definition files.
  */
 public record DataDrivenGuide(GuideItemSettings itemSettings, String defaultLanguage,
         Map<ResourceLocation, ConstantColor> customColors) {
-
-    private static final Codec<Integer> COLOR_VALUE_CODEC = Codec.STRING.comapFlatMap(value -> {
-        if (!value.startsWith("#")) {
-            return DataResult.error(() -> "Not a color code: " + value);
-        } else {
-            try {
-                return DataResult.success((int) Long.parseLong(value.substring(1), 16));
-            } catch (NumberFormatException e) {
-                return DataResult.error(() -> "Exception parsing color code: " + e.getMessage());
-            }
+    public static DataDrivenGuide parse(JsonElement json) {
+        if (!json.isJsonObject()) {
+            throw new JsonParseException("Expected guide definition to be an object");
         }
-    }, rgba -> String.format(Locale.ROOT, "#%08X", rgba));
-
-    private static final Codec<ConstantColor> CONSTANT_COLOR_CODEC = RecordCodecBuilder.create(builder -> builder.group(
-            COLOR_VALUE_CODEC.fieldOf("dark_mode").forGetter(ConstantColor::darkModeColor),
-            COLOR_VALUE_CODEC.fieldOf("light_mode").forGetter(ConstantColor::lightModeColor))
-            .apply(builder, ConstantColor::new));
-
-    @Deprecated(forRemoval = true)
-    public DataDrivenGuide(GuideItemSettings itemSettings) {
-        this(itemSettings, "en_us", Map.of());
+        var object = json.getAsJsonObject();
+        return new DataDrivenGuide(
+                JsonParseUtil.parseObject(object, "item_settings",
+                        GuideItemSettings::parse, GuideItemSettings.DEFAULT),
+                JsonUtils.getString(object, "default_language", "en_us"),
+                JsonParseUtil.parseObject(object, "custom_colors",
+                        DataDrivenGuide::parseCustomColors, Map.of()));
     }
 
-    public static Codec<DataDrivenGuide> CODEC = RecordCodecBuilder.create(
-            builder -> builder.group(
-                    GuideItemSettings.CODEC.optionalFieldOf("item_settings", GuideItemSettings.DEFAULT)
-                            .forGetter(DataDrivenGuide::itemSettings),
-                    Codec.STRING.optionalFieldOf("default_language", "en_us")
-                            .forGetter(DataDrivenGuide::defaultLanguage),
-                    Codec.unboundedMap(ResourceLocation.CODEC, CONSTANT_COLOR_CODEC)
-                            .optionalFieldOf("custom_colors", Map.of()).forGetter(DataDrivenGuide::customColors))
-                    .apply(builder, DataDrivenGuide::new));
+    private static Map<ResourceLocation, ConstantColor> parseCustomColors(JsonObject object) {
+        var result = new HashMap<ResourceLocation, ConstantColor>();
+        for (var entry : object.entrySet()) {
+            var colorId = JsonParseUtil.parseId(entry.getKey());
+            var color = entry.getValue().getAsJsonObject();
+            var darkMode = parseColor(JsonUtils.getString(color, "dark_mode"));
+            var lightMode = parseColor(JsonUtils.getString(color, "light_mode"));
+            result.put(colorId, new ConstantColor(lightMode, darkMode));
+        }
+        return result;
+    }
+
+    private static int parseColor(String value) {
+        if (!value.startsWith("#")) {
+            throw new JsonParseException("Not a color code: " + value);
+        }
+
+        try {
+            return (int) Long.parseLong(value.substring(1), 16);
+        } catch (NumberFormatException e) {
+            throw new JsonParseException("Exception parsing color code: " + e.getMessage(), e);
+        }
+    }
 }

@@ -7,7 +7,7 @@ import guideme.document.block.LytVBox;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.scene.GuidebookScene;
 import guideme.scene.element.SceneElementTagCompiler;
-import net.minecraft.core.BlockPos;
+import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class AnnotationTagCompiler implements SceneElementTagCompiler {
@@ -15,7 +15,7 @@ public abstract class AnnotationTagCompiler implements SceneElementTagCompiler {
     @Override
     public final void compile(GuidebookScene scene, PageCompiler compiler, LytErrorSink errorSink,
             MdxJsxElementFields el) {
-        compileTemplate(scene, compiler, errorSink, el, BlockPos.ZERO);
+        compileTemplate(scene, compiler, errorSink, el, BlockPos.ORIGIN);
     }
 
     public final void compileTemplate(GuidebookScene scene, PageCompiler compiler, LytErrorSink errorSink,
@@ -45,26 +45,14 @@ public abstract class AnnotationTagCompiler implements SceneElementTagCompiler {
     }
 
     /**
-     * @deprecated Use
-     *             {@link #createAnnotation(GuidebookScene, PageCompiler, LytErrorSink, MdxJsxElementFields, BlockPos)}
-     *             instead.
-     */
-    @Nullable
-    protected abstract SceneAnnotation createAnnotation(PageCompiler compiler,
-            LytErrorSink errorSink,
-            MdxJsxElementFields el);
-
-    /**
      * @param instancePosition Used when the annotation is compiled as part of a template, just add this to the position
-     *                         of the annotation. When an annotation is not in a template, {@link BlockPos#ZERO} is
+     *                         of the annotation. When an annotation is not in a template, {@link BlockPos#ORIGIN} is
      *                         passed.
      */
     @Nullable
-    protected SceneAnnotation createAnnotation(GuidebookScene scene,
+    protected abstract SceneAnnotation createAnnotation(GuidebookScene scene,
             PageCompiler compiler,
             LytErrorSink errorSink,
             MdxJsxElementFields el,
-            BlockPos instancePosition) {
-        return null;
-    }
+            BlockPos instancePosition);
 }

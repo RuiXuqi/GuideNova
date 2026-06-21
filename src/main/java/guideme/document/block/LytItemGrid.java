@@ -4,8 +4,8 @@ import guideme.document.LytRect;
 import guideme.layout.LayoutContext;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 
 /**
  * Shows items in a grid-like fashion, i.e. to show-case variants.

@@ -1,36 +1,29 @@
 package guideme.scene.level;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.FullChunkStatus;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.chunk.Chunk;
 import org.jetbrains.annotations.Nullable;
 
-class GuidebookChunk extends LevelChunk {
-    public GuidebookChunk(GuidebookLevel level, ChunkPos pos) {
-        super(level, pos);
+class GuidebookChunk extends Chunk {
+    public GuidebookChunk(GuidebookLevel level, int chunkX, int chunkZ) {
+        super(level, chunkX, chunkZ);
     }
 
     private GuidebookLevel getGuidebookLevel() {
-        return (GuidebookLevel) getLevel();
+        return (GuidebookLevel) getWorld();
     }
 
     @Nullable
-    public BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving) {
-        getGuidebookLevel().prepareLighting(pos);
-
-        var result = super.setBlockState(pos, state, isMoving);
-        if (state.isAir()) {
+    @Override
+    public IBlockState setBlockState(BlockPos pos, IBlockState state) {
+        var result = super.setBlockState(pos, state);
+        if (state.getBlock().isAir(state, getGuidebookLevel(), BlockPos.ORIGIN)) {
             getGuidebookLevel().removeFilledBlock(pos);
         } else {
             getGuidebookLevel().addFilledBlock(pos);
         }
         return result;
-    }
-
-    public FullChunkStatus getFullStatus() {
-        return FullChunkStatus.FULL;
     }
 
 }

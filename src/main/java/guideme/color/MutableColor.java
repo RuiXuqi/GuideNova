@@ -1,7 +1,6 @@
 package guideme.color;
 
-import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
+import net.minecraft.util.math.MathHelper;
 
 /**
  * A helper for mutating color values. The color values are stored as {@code float} components between 0 and 1.
@@ -39,10 +38,10 @@ public final class MutableColor implements ColorValue {
     }
 
     public static MutableColor ofArgb32(int packedColor) {
-        var r = FastColor.ARGB32.red(packedColor);
-        var g = FastColor.ARGB32.green(packedColor);
-        var b = FastColor.ARGB32.blue(packedColor);
-        var a = FastColor.ARGB32.alpha(packedColor);
+        var r = ARGB.red(packedColor);
+        var g = ARGB.green(packedColor);
+        var b = ARGB.blue(packedColor);
+        var a = ARGB.alpha(packedColor);
         return MutableColor.ofBytes(r, g, b, a);
     }
 
@@ -66,7 +65,7 @@ public final class MutableColor implements ColorValue {
     }
 
     public int toArgb32() {
-        return FastColor.ARGB32.color(
+        return ARGB.color(
                 alphaByte(),
                 redByte(),
                 greenByte(),
@@ -74,11 +73,11 @@ public final class MutableColor implements ColorValue {
     }
 
     public int toAbgr32() {
-        return FastColor.ABGR32.color(
+        return ARGB.color(
                 alphaByte(),
-                blueByte(),
+                redByte(),
                 greenByte(),
-                redByte());
+                blueByte());
     }
 
     public float red() {
@@ -98,17 +97,17 @@ public final class MutableColor implements ColorValue {
     }
 
     public MutableColor setRed(float r) {
-        this.r = Mth.clamp(r, 0, 1);
+        this.r = MathHelper.clamp(r, 0, 1);
         return this;
     }
 
     public MutableColor setGreen(float g) {
-        this.g = Mth.clamp(g, 0, 1);
+        this.g = MathHelper.clamp(g, 0, 1);
         return this;
     }
 
     public MutableColor setBlue(float b) {
-        this.b = Mth.clamp(b, 0, 1);
+        this.b = MathHelper.clamp(b, 0, 1);
         return this;
     }
 
@@ -154,11 +153,11 @@ public final class MutableColor implements ColorValue {
     }
 
     private static int toByte(float v) {
-        return Mth.clamp(Math.round(v * 255), 0, 255);
+        return MathHelper.clamp(Math.round(v * 255), 0, 255);
     }
 
     private static float fromByte(int v) {
-        return Mth.clamp(v / 255f, 0f, 1f);
+        return MathHelper.clamp(v / 255f, 0f, 1f);
     }
 
     public MutableColor lighter(float percentage) {
@@ -173,7 +172,7 @@ public final class MutableColor implements ColorValue {
 
     private void addLuminance(float offset) {
         var lab = toOklab();
-        lab[0] = Mth.clamp(lab[0] * (100 + offset) / 100.0f, 0.0f, 1.0f);
+        lab[0] = MathHelper.clamp(lab[0] * (100 + offset) / 100.0f, 0.0f, 1.0f);
         fromOklab(lab);
     }
 

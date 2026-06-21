@@ -1,8 +1,8 @@
 package guideme.internal.util;
 
 import guideme.compiler.ParsedGuidePage;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,11 +17,11 @@ public final class NavigationUtil {
 
         var icon = ItemStack.EMPTY;
         if (navigation != null && navigation.iconItemId() != null) {
-            var iconItem = BuiltInRegistries.ITEM.getOptional(navigation.iconItemId()).orElse(null);
+            var iconItem = ForgeRegistries.ITEMS.getValue(navigation.iconItemId());
             if (iconItem != null) {
                 if (navigation.iconNbt() != null) {
                     icon = new ItemStack(iconItem);
-                    icon.setTag(navigation.iconNbt());
+                    icon.setTagCompound(navigation.iconNbt());
                 } else {
                     icon = new ItemStack(iconItem);
                 }

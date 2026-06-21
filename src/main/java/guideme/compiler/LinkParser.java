@@ -2,8 +2,7 @@ package guideme.compiler;
 
 import guideme.PageAnchor;
 import java.net.URI;
-import net.minecraft.ResourceLocationException;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 public final class LinkParser {
     private LinkParser() {
@@ -39,7 +38,7 @@ public final class LinkParser {
         ResourceLocation pageId;
         try {
             pageId = IdUtils.resolveLink(href, compiler.getPageId());
-        } catch (ResourceLocationException ignored) {
+        } catch (IdUtils.ResourceLocationException ignored) {
             visitor.handleError("Invalid link");
             return;
         }

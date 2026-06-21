@@ -18,32 +18,26 @@
 
 package guideme.internal.util;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import guideme.color.ARGB;
 import guideme.internal.GuideME;
+import guideme.ui.UiRect;
 import java.util.Objects;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import org.joml.Matrix4f;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.MathHelper;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 import org.lwjgl.opengl.GL11;
 
 /**
  * Utility class for drawing rectangular textures in the UI.
  */
-@OnlyIn(Dist.CLIENT)
+@SideOnly(Side.CLIENT)
 public final class Blitter {
 
     // This assumption is obviously bogus, but currently all textures are this size,
@@ -62,8 +56,13 @@ public final class Blitter {
     private int g = 255;
     private int b = 255;
     private int a = 255;
-    private Rect2i srcRect;
-    private Rect2i destRect = new Rect2i(0, 0, 0, 0);
+    private UiRect srcRect;
+    private boolean hasUv;
+    private float minU;
+    private float minV;
+    private float maxU;
+    private float maxV;
+    private UiRect destRect = new UiRect(0, 0, 0, 0);
     private boolean blending = true;
     private TextureTransform transform = TextureTransform.NONE;
     private int zOffset;
@@ -105,20 +104,20 @@ public final class Blitter {
     /**
      * Creates a blitter from a texture atlas sprite.
      */
-    public static Blitter sprite(TextureAtlasSprite sprite) {
-        var atlas = (TextureAtlas) Minecraft.getInstance().getTextureManager().getTexture(sprite.atlasLocation());
-
-        return new Blitter(sprite.atlasLocation(), atlas.getWidth(), atlas.getHeight())
-                .src(
-                        sprite.getX(),
-                        sprite.getY(),
-                        sprite.contents().width(),
-                        sprite.contents().height());
+    public static Blitter sprite(ResourceLocation atlasLocation, TextureAtlasSprite sprite) {
+        return new Blitter(atlasLocation, 1, 1)
+                .src(0, 0, sprite.getIconWidth(), sprite.getIconHeight())
+                .uv(sprite.getMinU(), sprite.getMinV(), sprite.getMaxU(), sprite.getMaxV());
     }
 
     public Blitter copy() {
         Blitter result = new Blitter(texture, referenceWidth, referenceHeight);
         result.srcRect = srcRect;
+        result.hasUv = hasUv;
+        result.minU = minU;
+        result.minV = minV;
+        result.maxU = maxU;
+        result.maxV = maxV;
         result.destRect = destRect;
         result.r = r;
         result.g = g;
@@ -131,24 +130,34 @@ public final class Blitter {
      * Use the given rectangle from the texture (in pixels assuming a 256x256 texture size).
      */
     public Blitter src(int x, int y, int w, int h) {
-        this.srcRect = new Rect2i(x, y, w, h);
+        this.srcRect = new UiRect(x, y, w, h);
+        this.hasUv = false;
+        return this;
+    }
+
+    private Blitter uv(float minU, float minV, float maxU, float maxV) {
+        this.hasUv = true;
+        this.minU = minU;
+        this.minV = minV;
+        this.maxU = maxU;
+        this.maxV = maxV;
         return this;
     }
 
     public Blitter srcWidth(int w) {
-        this.srcRect = new Rect2i(srcRect.getX(), srcRect.getY(), w, srcRect.getHeight());
+        this.srcRect = new UiRect(srcRect.getX(), srcRect.getY(), w, srcRect.getHeight());
         return this;
     }
 
     public Blitter srcHeight(int h) {
-        this.srcRect = new Rect2i(srcRect.getX(), srcRect.getY(), srcRect.getWidth(), h);
+        this.srcRect = new UiRect(srcRect.getX(), srcRect.getY(), srcRect.getWidth(), h);
         return this;
     }
 
     /**
      * Use the given rectangle from the texture (in pixels assuming a 256x256 texture size).
      */
-    public Blitter src(Rect2i rect) {
+    public Blitter src(UiRect rect) {
         return src(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
     }
 
@@ -156,7 +165,7 @@ public final class Blitter {
      * Draw into the rectangle defined by the given coordinates.
      */
     public Blitter dest(int x, int y, int w, int h) {
-        this.destRect = new Rect2i(x, y, w, h);
+        this.destRect = new UiRect(x, y, w, h);
         return this;
     }
 
@@ -170,11 +179,11 @@ public final class Blitter {
     /**
      * Draw into the given rectangle.
      */
-    public Blitter dest(Rect2i rect) {
+    public Blitter dest(UiRect rect) {
         return dest(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
     }
 
-    public Rect2i getDestRect() {
+    public UiRect getDestRect() {
         int x = destRect.getX();
         int y = destRect.getY();
         int w = 0, h = 0;
@@ -185,26 +194,26 @@ public final class Blitter {
             w = srcRect.getWidth();
             h = srcRect.getHeight();
         }
-        return new Rect2i(x, y, w, h);
+        return new UiRect(x, y, w, h);
     }
 
     public Blitter color(float r, float g, float b) {
-        this.r = (int) (Mth.clamp(r, 0, 1) * 255);
-        this.g = (int) (Mth.clamp(g, 0, 1) * 255);
-        this.b = (int) (Mth.clamp(b, 0, 1) * 255);
+        this.r = (int) (MathHelper.clamp(r, 0, 1) * 255);
+        this.g = (int) (MathHelper.clamp(g, 0, 1) * 255);
+        this.b = (int) (MathHelper.clamp(b, 0, 1) * 255);
         return this;
     }
 
     public Blitter colorArgb(int packedArgb) {
-        this.a = FastColor.ARGB32.alpha(packedArgb);
-        this.r = FastColor.ARGB32.red(packedArgb);
-        this.g = FastColor.ARGB32.green(packedArgb);
-        this.b = FastColor.ARGB32.blue(packedArgb);
+        this.a = ARGB.alpha(packedArgb);
+        this.r = ARGB.red(packedArgb);
+        this.g = ARGB.green(packedArgb);
+        this.b = ARGB.blue(packedArgb);
         return this;
     }
 
     public Blitter opacity(float a) {
-        this.a = (int) (Mth.clamp(a, 0, 1) * 255);
+        this.a = (int) (MathHelper.clamp(a, 0, 1) * 255);
         return this;
     }
 
@@ -242,13 +251,17 @@ public final class Blitter {
         return this;
     }
 
-    public void blit(GuiGraphics guiGraphics) {
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, this.texture);
+    public void blit() {
+        Minecraft.getMinecraft().getTextureManager().bindTexture(this.texture);
 
         // With no source rectangle, we'll use the entirety of the texture. This happens rarely though.
         float minU, minV, maxU, maxV;
-        if (srcRect == null) {
+        if (hasUv) {
+            minU = this.minU;
+            minV = this.minV;
+            maxU = this.maxU;
+            maxV = this.maxV;
+        } else if (srcRect == null) {
             minU = minV = 0;
             maxU = maxV = 1;
         } else {
@@ -285,34 +298,34 @@ public final class Blitter {
             y2 += srcRect.getHeight();
         }
 
-        Matrix4f matrix = guiGraphics.pose().last().pose();
-
-        BufferBuilder bufferbuilder = Tesselator.getInstance().getBuilder();
-        bufferbuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        bufferbuilder.vertex(matrix, x1, y2, 0)
-                .uv(minU, maxV)
+        Tessellator tess = Tessellator.getInstance();
+        BufferBuilder bufferbuilder = tess.getBuffer();
+        bufferbuilder.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX_COLOR);
+        bufferbuilder.pos(x1, y2, 0)
+                .tex(minU, maxV)
                 .color(r, g, b, a)
                 .endVertex();
-        bufferbuilder.vertex(matrix, x2, y2, 0)
-                .uv(maxU, maxV)
+        bufferbuilder.pos(x2, y2, 0)
+                .tex(maxU, maxV)
                 .color(r, g, b, a)
                 .endVertex();
-        bufferbuilder.vertex(matrix, x2, y1, 0)
-                .uv(maxU, minV)
+        bufferbuilder.pos(x2, y1, 0)
+                .tex(maxU, minV)
                 .color(r, g, b, a)
                 .endVertex();
-        bufferbuilder.vertex(matrix, x1, y1, 0)
-                .uv(minU, minV)
+        bufferbuilder.pos(x1, y1, 0)
+                .tex(minU, minV)
                 .color(r, g, b, a)
                 .endVertex();
 
         if (blending) {
-            RenderSystem.enableBlend();
-            RenderSystem.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA,
+                    GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
         } else {
-            RenderSystem.disableBlend();
+            GlStateManager.disableBlend();
         }
-        BufferUploader.drawWithShader(bufferbuilder.end());
+        tess.draw();
     }
 
 }

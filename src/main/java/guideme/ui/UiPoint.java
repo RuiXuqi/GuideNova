@@ -18,15 +18,13 @@
 
 package guideme.ui;
 
-import net.minecraft.client.renderer.Rect2i;
-
 /**
  * Represents an integer x,y coordinate in the UI.
  */
 public record UiPoint(int x, int y) {
     public static final UiPoint ZERO = new UiPoint(0, 0);
 
-    public static UiPoint fromTopLeft(Rect2i bounds) {
+    public static UiPoint fromTopLeft(UiRect bounds) {
         return new UiPoint(bounds.getX(), bounds.getY());
     }
 
@@ -34,7 +32,7 @@ public record UiPoint(int x, int y) {
         return new UiPoint(this.x + x, this.y + y);
     }
 
-    public boolean isIn(Rect2i rect) {
+    public boolean isIn(UiRect rect) {
         return x >= rect.getX()
                 && y >= rect.getY()
                 && x < rect.getX() + rect.getWidth()

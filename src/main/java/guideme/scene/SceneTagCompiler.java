@@ -1,4 +1,3 @@
-
 package guideme.scene;
 
 import guideme.color.SymbolicColor;

@@ -1,30 +1,22 @@
 package guideme.internal.screen;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
-import org.joml.Vector3f;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.audio.SoundHandler;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.math.MathHelper;
+import org.lwjgl.opengl.GL11;
 
-public class GuideScrollbar extends AbstractWidget {
+public class GuideScrollbar extends GuideButton {
     private static final int WIDTH = 8;
     private int contentHeight;
     private int scrollAmount;
     private Double thumbHeldAt;
 
     public GuideScrollbar() {
-        super(0, 0, WIDTH, 0, Component.empty());
-    }
-
-    @Override
-    protected void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
+        super(0, 0, WIDTH, 0, "");
     }
 
     protected int getMaxScrollAmount() {
@@ -32,7 +24,7 @@ public class GuideScrollbar extends AbstractWidget {
     }
 
     @Override
-    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    protected void renderWidget(Minecraft mc, int mouseX, int mouseY, float partialTicks) {
         if (!visible) {
             return;
         }
@@ -43,30 +35,30 @@ public class GuideScrollbar extends AbstractWidget {
         }
 
         int thumbHeight = getThumbHeight();
-        int left = getX();
+        int left = x;
         int right = left + 8;
-        int top = getY() + getThumbTop();
+        int top = y + getThumbTop();
         int bottom = top + thumbHeight;
 
-        var pose = guiGraphics.pose().last().pose();
-        var min = new Vector3f();
-        pose.transformPosition(left, top, 0, min);
-        var max = new Vector3f();
-        pose.transformPosition(right, bottom, 0, max);
+        GlStateManager.disableTexture2D();
+        GlStateManager.shadeModel(GL11.GL_SMOOTH);
+        Tessellator tesselator = Tessellator.getInstance();
+        BufferBuilder bufferBuilder = tesselator.getBuffer();
+        bufferBuilder.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
 
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder bufferBuilder = tesselator.getBuilder();
-        bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        bufferBuilder.vertex(min.x, max.y, 0.0).color(128, 128, 128, 255).endVertex();
-        bufferBuilder.vertex(max.x, max.y, 0.0).color(128, 128, 128, 255).endVertex();
-        bufferBuilder.vertex(max.x, min.y, 0.0).color(128, 128, 128, 255).endVertex();
-        bufferBuilder.vertex(min.x, min.y, 0.0).color(128, 128, 128, 255).endVertex();
-        bufferBuilder.vertex(min.x, max.y - 1, 0.0).color(192, 192, 192, 255).endVertex();
-        bufferBuilder.vertex(max.x - 1, max.y - 1, 0.0).color(192, 192, 192, 255).endVertex();
-        bufferBuilder.vertex(max.x - 1, min.y, 0.0).color(192, 192, 192, 255).endVertex();
-        bufferBuilder.vertex(min.x, min.y, 0.0).color(192, 192, 192, 255).endVertex();
-        tesselator.end();
+        bufferBuilder.pos(right, top, 0.0).color(128, 128, 128, 255).endVertex();
+        bufferBuilder.pos(left, top, 0.0).color(128, 128, 128, 255).endVertex();
+        bufferBuilder.pos(left, bottom, 0.0).color(128, 128, 128, 255).endVertex();
+        bufferBuilder.pos(right, bottom, 0.0).color(128, 128, 128, 255).endVertex();
+
+        bufferBuilder.pos(right - 1, top, 0.0).color(192, 192, 192, 255).endVertex();
+        bufferBuilder.pos(left, top, 0.0).color(192, 192, 192, 255).endVertex();
+        bufferBuilder.pos(left, bottom - 1, 0.0).color(192, 192, 192, 255).endVertex();
+        bufferBuilder.pos(right - 1, bottom - 1, 0.0).color(192, 192, 192, 255).endVertex();
+
+        tesselator.draw();
+        GlStateManager.shadeModel(GL11.GL_FLAT);
+        GlStateManager.enableTexture2D();
     }
 
     /**
@@ -83,7 +75,7 @@ public class GuideScrollbar extends AbstractWidget {
         if (contentHeight <= 0) {
             return 0;
         }
-        return Mth.clamp((int) ((float) (this.height * this.height) / (float) contentHeight), 32, this.height);
+        return MathHelper.clamp((int) ((float) (this.height * this.height) / (float) contentHeight), 32, this.height);
     }
 
     @Override
@@ -92,11 +84,11 @@ public class GuideScrollbar extends AbstractWidget {
             return false;
         }
 
-        var thumbTop = getY() + getThumbTop();
+        var thumbTop = y + getThumbTop();
         var thumbBottom = thumbTop + getThumbHeight();
 
-        boolean thumbHit = mouseX >= getX()
-                && mouseX <= getX() + WIDTH
+        boolean thumbHit = mouseX >= x
+                && mouseX <= x + WIDTH
                 && mouseY >= thumbTop
                 && mouseY < thumbBottom;
         if (thumbHit) {
@@ -122,7 +114,7 @@ public class GuideScrollbar extends AbstractWidget {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (this.visible && this.thumbHeldAt != null) {
 
-            var thumbY = (int) Math.round(mouseY - getY() - thumbHeldAt);
+            var thumbY = (int) Math.round(mouseY - y - thumbHeldAt);
             var maxThumbY = height - getThumbHeight();
             var scrollAmount = (int) Math.round(thumbY / (double) maxThumbY * getMaxScrollAmount());
             setScrollAmount(scrollAmount);
@@ -143,9 +135,14 @@ public class GuideScrollbar extends AbstractWidget {
         }
     }
 
+    @Override
+    public void playPressSound(SoundHandler handler) {
+        // Mute default sound
+    }
+
     public void move(int x, int y, int height) {
-        setX(x);
-        setY(y);
+        this.x = x;
+        this.y = y;
         this.height = height;
     }
 
@@ -161,6 +158,6 @@ public class GuideScrollbar extends AbstractWidget {
     }
 
     public void setScrollAmount(int scrollAmount) {
-        this.scrollAmount = Mth.clamp(scrollAmount, 0, getMaxScrollAmount());
+        this.scrollAmount = MathHelper.clamp(scrollAmount, 0, getMaxScrollAmount());
     }
 }

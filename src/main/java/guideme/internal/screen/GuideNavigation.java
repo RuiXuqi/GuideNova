@@ -2,12 +2,12 @@ package guideme.internal.screen;
 
 import guideme.Guide;
 import guideme.PageAnchor;
+import guideme.internal.util.PlatformUtil;
 import java.net.URI;
 import java.util.Objects;
-import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ConfirmLinkScreen;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiConfirmOpenLink;
+import net.minecraft.client.gui.GuiScreen;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,20 +25,20 @@ public final class GuideNavigation {
     public static void navigateTo(Guide guide, PageAnchor anchor) {
         var history = GlobalInMemoryHistory.get(guide);
         var currentScreen = getCurrentGuideMeScreen();
-        Screen screenToReturnTo = null;
+        GuiScreen screenToReturnTo = null;
         if (currentScreen instanceof GuideScreen guideScreen) {
             screenToReturnTo = guideScreen.getReturnToOnClose();
         } else if (currentScreen instanceof GuideSearchScreen searchScreen) {
             screenToReturnTo = searchScreen.getReturnToOnClose();
         } else {
-            screenToReturnTo = Minecraft.getInstance().screen;
+            screenToReturnTo = Minecraft.getMinecraft().currentScreen;
         }
 
         // Handle built-in pages
         if (GuideSearchScreen.PAGE_ID.equals(anchor.pageId())) {
             var guiScreen = GuideSearchScreen.open(guide, anchor.anchor());
             guiScreen.setReturnToOnClose(screenToReturnTo);
-            Minecraft.getInstance().setScreen(guiScreen);
+            Minecraft.getMinecraft().displayGuiScreen(guiScreen);
             return;
         }
 
@@ -58,12 +58,12 @@ public final class GuideNavigation {
 
         GuideScreen guideScreen = GuideScreen.openNew(guide, anchor, history);
         guideScreen.setReturnToOnClose(screenToReturnTo);
-        Minecraft.getInstance().setScreen(guideScreen);
+        Minecraft.getMinecraft().displayGuiScreen(guideScreen);
     }
 
     @Nullable
-    private static Screen getCurrentGuideMeScreen() {
-        var currentScreen = Minecraft.getInstance().screen;
+    private static GuiScreen getCurrentGuideMeScreen() {
+        var currentScreen = Minecraft.getMinecraft().currentScreen;
         if (currentScreen instanceof GuideScreen || currentScreen instanceof GuideSearchScreen) {
             return currentScreen;
         }
@@ -90,19 +90,18 @@ public final class GuideNavigation {
         }
 
         // Treat it as an external URL if it has a scheme
-        var minecraft = Minecraft.getInstance();
-        var previousScreen = minecraft.screen;
+        var minecraft = Minecraft.getMinecraft();
+        var previousScreen = minecraft.currentScreen;
 
         if (uri.getScheme() != null) {
-            if (minecraft.options.chatLinksPrompt().get().booleanValue()) {
-                minecraft.setScreen(new ConfirmLinkScreen(doOpen -> {
-                    if (doOpen) {
-                        Util.getPlatform().openUri(uri);
-                    }
-                    minecraft.setScreen(previousScreen);
-                }, href, false));
+            if (minecraft.gameSettings.chatLinksPrompt) {
+                minecraft.displayGuiScreen(new GuiConfirmOpenLink((doOpen, _) -> {
+                    if (doOpen)
+                        PlatformUtil.openUri(uri);
+                    minecraft.displayGuiScreen(previousScreen);
+                }, href, -1, false));
             } else {
-                Util.getPlatform().openUri(uri);
+                PlatformUtil.openUri(uri);
             }
         } else {
             LOG.debug("Can't open relative URL: '{}'", href);

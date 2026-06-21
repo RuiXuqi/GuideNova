@@ -78,8 +78,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import net.minecraft.ResourceLocationException;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,20 +120,10 @@ public final class PageCompiler {
         }
     }
 
-    @Deprecated(forRemoval = true)
-    public static ParsedGuidePage parse(String sourcePack, ResourceLocation id, InputStream in) throws IOException {
-        return parse(sourcePack, "en_us", id, in);
-    }
-
     public static ParsedGuidePage parse(String sourcePack, String language, ResourceLocation id, InputStream in)
             throws IOException {
         String pageContent = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         return parse(sourcePack, language, id, pageContent);
-    }
-
-    @Deprecated(forRemoval = true)
-    public static ParsedGuidePage parse(String sourcePack, ResourceLocation id, String pageContent) {
-        return parse(sourcePack, "en_us", id, pageContent);
     }
 
     public static ParsedGuidePage parse(String sourcePack, String language, ResourceLocation id, String pageContent) {
@@ -245,71 +234,72 @@ public final class PageCompiler {
         LytBlock previousLayoutChild = null;
         for (var child : children) {
             LytBlock layoutChild;
-            if (child instanceof MdAstThematicBreak) {
-                layoutChild = new LytThematicBreak();
-            } else if (child instanceof MdAstList astList) {
-                layoutChild = compileList(astList);
-            } else if (child instanceof MdAstCode astCode) {
-                var paragraph = new LytParagraph();
-                paragraph.modifyStyle(style -> style.italic(true).whiteSpace(WhiteSpaceMode.PRE));
-                paragraph.setMarginLeft(5);
-                paragraph.appendText(astCode.value);
-                layoutChild = paragraph;
-            } else if (child instanceof MdAstHeading astHeading) {
-                var heading = new LytHeading();
-                heading.setDepth(astHeading.depth);
-                compileFlowContext(astHeading, heading);
-                layoutChild = heading;
-            } else if (child instanceof MdAstBlockquote astBlockquote) {
-                var blockquote = new LytVBox();
-                blockquote.setBackgroundColor(SymbolicColor.BLOCKQUOTE_BACKGROUND);
-                blockquote.setPadding(5);
-                blockquote.setPaddingLeft(10);
-                blockquote.setMarginTop(DEFAULT_ELEMENT_SPACING);
-                blockquote.setMarginBottom(DEFAULT_ELEMENT_SPACING);
-                compileBlockContext(astBlockquote, blockquote);
-                // Clear out top/bottom margins
-                var bqChildren = blockquote.getChildren();
-                if (!bqChildren.isEmpty()) {
-                    if (bqChildren.get(0) instanceof LytParagraph firstParagraph) {
-                        firstParagraph.setMarginTop(0);
-                    }
-                    if (bqChildren.get(bqChildren.size() - 1) instanceof LytParagraph lastParagraph) {
-                        lastParagraph.setMarginBottom(0);
-                    }
-                }
-                layoutChild = blockquote;
-            } else if (child instanceof MdAstParagraph astParagraph) {
-                var paragraph = new LytParagraph();
-                compileFlowContext(astParagraph, paragraph);
-                paragraph.setMarginTop(DEFAULT_ELEMENT_SPACING);
-                paragraph.setMarginBottom(DEFAULT_ELEMENT_SPACING);
-                layoutChild = paragraph;
-            } else if (child instanceof MdAstYamlFrontmatter) {
-                // This is handled by compile directly
-                layoutChild = null;
-            } else if (child instanceof GfmTable astTable) {
-                layoutChild = compileTable(astTable);
-            } else if (child instanceof MdxJsxFlowElement el) {
-                var compiler = tagCompilers.get(el.name());
-                if (compiler == null) {
-                    layoutChild = createErrorBlock("Unhandled MDX element in block context", child);
-                } else {
-                    layoutChild = null;
-                    compiler.compileBlockContext(this, layoutParent, el);
-                }
-            } else if (child instanceof MdAstPhrasingContent phrasingContent) {
-                // Wrap in a paragraph with no margins, but try appending to an existing paragraph before this
-                if (previousLayoutChild instanceof LytParagraph paragraph) {
-                    compileFlowContent(paragraph, phrasingContent);
-                    continue;
-                } else {
+            switch (child) {
+                case MdAstThematicBreak _ -> layoutChild = new LytThematicBreak();
+                case MdAstList astList -> layoutChild = compileList(astList);
+                case MdAstCode astCode -> {
                     var paragraph = new LytParagraph();
-                    compileFlowContent(paragraph, phrasingContent);
+                    paragraph.modifyStyle(style -> style.italic(true).whiteSpace(WhiteSpaceMode.PRE));
+                    paragraph.setMarginLeft(5);
+                    paragraph.appendText(astCode.value);
                     layoutChild = paragraph;
                 }
-            } else {
-                layoutChild = createErrorBlock("Unhandled Markdown node in block context", child);
+                case MdAstHeading astHeading -> {
+                    var heading = new LytHeading();
+                    heading.setDepth(astHeading.depth);
+                    compileFlowContext(astHeading, heading);
+                    layoutChild = heading;
+                }
+                case MdAstBlockquote astBlockquote -> {
+                    var blockquote = new LytVBox();
+                    blockquote.setBackgroundColor(SymbolicColor.BLOCKQUOTE_BACKGROUND);
+                    blockquote.setPadding(5);
+                    blockquote.setPaddingLeft(10);
+                    blockquote.setMarginTop(DEFAULT_ELEMENT_SPACING);
+                    blockquote.setMarginBottom(DEFAULT_ELEMENT_SPACING);
+                    compileBlockContext(astBlockquote, blockquote);
+                    // Clear out top/bottom margins
+                    var bqChildren = blockquote.getChildren();
+                    if (!bqChildren.isEmpty()) {
+                        if (bqChildren.getFirst() instanceof LytParagraph firstParagraph) {
+                            firstParagraph.setMarginTop(0);
+                        }
+                        if (bqChildren.getLast() instanceof LytParagraph lastParagraph) {
+                            lastParagraph.setMarginBottom(0);
+                        }
+                    }
+                    layoutChild = blockquote;
+                }
+                case MdAstParagraph astParagraph -> {
+                    var paragraph = new LytParagraph();
+                    compileFlowContext(astParagraph, paragraph);
+                    paragraph.setMarginTop(DEFAULT_ELEMENT_SPACING);
+                    paragraph.setMarginBottom(DEFAULT_ELEMENT_SPACING);
+                    layoutChild = paragraph;
+                }
+                case MdAstYamlFrontmatter _ -> layoutChild = null; // This is handled by compile directly
+                case GfmTable astTable -> layoutChild = compileTable(astTable);
+                case MdxJsxFlowElement el -> {
+                    var compiler = tagCompilers.get(el.name());
+                    if (compiler == null) {
+                        layoutChild = createErrorBlock("Unhandled MDX element in block context", child);
+                    } else {
+                        layoutChild = null;
+                        compiler.compileBlockContext(this, layoutParent, el);
+                    }
+                }
+                case MdAstPhrasingContent phrasingContent -> {
+                    // Wrap in a paragraph with no margins, but try appending to an existing paragraph before this
+                    if (previousLayoutChild instanceof LytParagraph paragraph) {
+                        compileFlowContent(paragraph, phrasingContent);
+                        continue;
+                    } else {
+                        var paragraph = new LytParagraph();
+                        compileFlowContent(paragraph, phrasingContent);
+                        layoutChild = paragraph;
+                    }
+                }
+                default -> layoutChild = createErrorBlock("Unhandled Markdown node in block context", child);
             }
 
             if (layoutChild != null) {
@@ -332,7 +322,7 @@ public final class PageCompiler {
                 // Fix up top/bottom margin for list item children
                 var children = listItem.getChildren();
                 if (!children.isEmpty()) {
-                    var firstChild = children.get(0);
+                    var firstChild = children.getFirst();
                     if (firstChild instanceof LytBlock firstBlock) {
                         firstBlock.setMarginTop(0);
                         firstBlock.setMarginBottom(0);
@@ -388,48 +378,53 @@ public final class PageCompiler {
 
     private void compileFlowContent(LytFlowParent layoutParent, MdAstAnyContent content) {
         LytFlowContent layoutChild;
-        if (content instanceof MdAstText astText) {
-            var text = new LytFlowText();
-            text.setText(astText.value);
-            layoutChild = text;
-        } else if (content instanceof MdAstInlineCode astCode) {
-            var text = new LytFlowText();
-            text.setText(astCode.value);
-            text.modifyStyle(style -> style.italic(true).whiteSpace(WhiteSpaceMode.PRE));
-            layoutChild = text;
-        } else if (content instanceof MdAstStrong astStrong) {
-            var span = new LytFlowSpan();
-            span.modifyStyle(style -> style.bold(true));
-            compileFlowContext(astStrong, span);
-            layoutChild = span;
-        } else if (content instanceof MdAstEmphasis astEmphasis) {
-            var span = new LytFlowSpan();
-            span.modifyStyle(style -> style.italic(true));
-            compileFlowContext(astEmphasis, span);
-            layoutChild = span;
-        } else if (content instanceof MdAstDelete astEmphasis) {
-            var span = new LytFlowSpan();
-            span.modifyStyle(style -> style.strikethrough(true));
-            compileFlowContext(astEmphasis, span);
-            layoutChild = span;
-        } else if (content instanceof MdAstBreak) {
-            layoutChild = new LytFlowBreak();
-        } else if (content instanceof MdAstLink astLink) {
-            layoutChild = compileLink(astLink, layoutParent);
-        } else if (content instanceof MdAstImage astImage) {
-            var inlineBlock = new LytFlowInlineBlock();
-            inlineBlock.setBlock(compileImage(astImage));
-            layoutChild = inlineBlock;
-        } else if (content instanceof MdxJsxTextElement el) {
-            var compiler = tagCompilers.get(el.name());
-            if (compiler == null) {
-                layoutChild = createErrorFlowContent("Unhandled MDX element in flow context", content);
-            } else {
-                layoutChild = null;
-                compiler.compileFlowContext(this, layoutParent, el);
+        switch (content) {
+            case MdAstText astText -> {
+                var text = new LytFlowText();
+                text.setText(astText.value);
+                layoutChild = text;
             }
-        } else {
-            layoutChild = createErrorFlowContent("Unhandled Markdown node in flow context", content);
+            case MdAstInlineCode astCode -> {
+                var text = new LytFlowText();
+                text.setText(astCode.value);
+                text.modifyStyle(style -> style.italic(true).whiteSpace(WhiteSpaceMode.PRE));
+                layoutChild = text;
+            }
+            case MdAstStrong astStrong -> {
+                var span = new LytFlowSpan();
+                span.modifyStyle(style -> style.bold(true));
+                compileFlowContext(astStrong, span);
+                layoutChild = span;
+            }
+            case MdAstEmphasis astEmphasis -> {
+                var span = new LytFlowSpan();
+                span.modifyStyle(style -> style.italic(true));
+                compileFlowContext(astEmphasis, span);
+                layoutChild = span;
+            }
+            case MdAstDelete astEmphasis -> {
+                var span = new LytFlowSpan();
+                span.modifyStyle(style -> style.strikethrough(true));
+                compileFlowContext(astEmphasis, span);
+                layoutChild = span;
+            }
+            case MdAstBreak _ -> layoutChild = new LytFlowBreak();
+            case MdAstLink astLink -> layoutChild = compileLink(astLink, layoutParent);
+            case MdAstImage astImage -> {
+                var inlineBlock = new LytFlowInlineBlock();
+                inlineBlock.setBlock(compileImage(astImage));
+                layoutChild = inlineBlock;
+            }
+            case MdxJsxTextElement el -> {
+                var compiler = tagCompilers.get(el.name());
+                if (compiler == null) {
+                    layoutChild = createErrorFlowContent("Unhandled MDX element in flow context", content);
+                } else {
+                    layoutChild = null;
+                    compiler.compileFlowContext(this, layoutParent, el);
+                }
+            }
+            default -> layoutChild = createErrorFlowContent("Unhandled Markdown node in flow context", content);
         }
 
         if (layoutChild != null) {
@@ -477,7 +472,7 @@ public final class PageCompiler {
                 image.setTitle("Missing image: " + astImage.url);
             }
             image.setImage(imageId, imageContent);
-        } catch (ResourceLocationException e) {
+        } catch (IdUtils.ResourceLocationException e) {
             LOG.error("Invalid image id: {}", astImage.url);
             image.setTitle("Invalid image URL: " + astImage.url);
         }
@@ -492,9 +487,7 @@ public final class PageCompiler {
 
     public LytFlowContent createErrorFlowContent(String text, UnistNode child) {
         LytFlowSpan span = new LytFlowSpan();
-        span.modifyStyle(style -> {
-            style.color(SymbolicColor.ERROR_TEXT).whiteSpace(WhiteSpaceMode.PRE);
-        });
+        span.modifyStyle(style -> style.color(SymbolicColor.ERROR_TEXT).whiteSpace(WhiteSpaceMode.PRE));
 
         // Find the position in the source
         var position = child.position();

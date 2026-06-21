@@ -1,13 +1,17 @@
 package guideme.scene;
 
 import guideme.document.LytSize;
-import net.minecraft.util.Mth;
+import java.nio.FloatBuffer;
+import net.minecraft.client.renderer.GLAllocation;
+import net.minecraft.client.renderer.GlStateManager;
+import org.joml.Math;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 import org.joml.Vector4f;
 
 public class CameraSettings {
+    private static final FloatBuffer MATRIX_BUFFER = GLAllocation.createDirectFloatBuffer(16);
 
     private float zoom = 1;
 
@@ -79,9 +83,9 @@ public class CameraSettings {
 
         if (mode == Mode.ORTOGRAPHIC) {
             result.translate(rotationCenter.x, rotationCenter.y, rotationCenter.z);
-            result.rotateZ(Mth.DEG_TO_RAD * rotationZ);
-            result.rotateX(Mth.DEG_TO_RAD * rotationX);
-            result.rotateY(Mth.DEG_TO_RAD * rotationY);
+            result.rotateZ(Math.toRadians(rotationZ));
+            result.rotateX(Math.toRadians(rotationX));
+            result.rotateY(Math.toRadians(rotationY));
             result.translate(-rotationCenter.x, -rotationCenter.y, -rotationCenter.z);
         }
 
@@ -160,5 +164,12 @@ public class CameraSettings {
         offsetX = settings.offsetX();
         offsetY = settings.offsetY();
         zoom = settings.zoom();
+    }
+
+    public static void multiply(Matrix4f matrix) {
+        MATRIX_BUFFER.clear();
+        matrix.get(MATRIX_BUFFER);
+        MATRIX_BUFFER.rewind();
+        GlStateManager.multMatrix(MATRIX_BUFFER);
     }
 }

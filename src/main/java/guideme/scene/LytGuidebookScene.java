@@ -1,7 +1,5 @@
 package guideme.scene;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import guideme.color.ColorValue;
 import guideme.color.LightDarkMode;
 import guideme.color.SymbolicColor;
@@ -30,12 +28,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector2i;
+import org.lwjgl.opengl.GL11;
 
 /**
  * Shows a pseudo-in-world scene within the guidebook.
@@ -81,14 +81,14 @@ public class LytGuidebookScene extends LytBox {
         zoomInButton = new LytWidget(new GuideIconButton(0, 0, GuideIconButton.Role.ZOOM_IN, () -> {
             if (scene != null) {
                 var currentZoom = scene.getCameraSettings().getZoom();
-                currentZoom = Mth.clamp(currentZoom + 0.5f, 0.1f, 8f);
+                currentZoom = MathHelper.clamp(currentZoom + 0.5f, 0.1f, 8f);
                 scene.getCameraSettings().setZoom(currentZoom);
             }
         }));
         zoomOutButton = new LytWidget(new GuideIconButton(0, 0, GuideIconButton.Role.ZOOM_OUT, () -> {
             if (scene != null) {
                 var currentZoom = scene.getCameraSettings().getZoom();
-                currentZoom = Mth.clamp(currentZoom - 0.5f, 0.1f, 8f);
+                currentZoom = MathHelper.clamp(currentZoom - 0.5f, 0.1f, 8f);
                 scene.getCameraSettings().setZoom(currentZoom);
             }
         }));
@@ -142,13 +142,16 @@ public class LytGuidebookScene extends LytBox {
         var sceneWidth = fullWidth ? availableWidth : Math.min(prefSceneSize.width(), availableWidth);
         var sceneHeight = prefSceneSize.height();
 
-        // We have to layout twice to get the preferred size
-        var toolbarBounds = toolbar.layout(context, x, y, 0);
-        // If the space isn't enough for both, reduce the scene width
-        if (sceneWidth + toolbarBounds.width() > availableWidth) {
-            sceneWidth = availableWidth - toolbarBounds.width();
+        var toolbarBounds = LytRect.empty();
+        if (interactive) {
+            // We have to layout twice to get the preferred size
+            toolbarBounds = toolbar.layout(context, x, y, 0);
+            // If the space isn't enough for both, reduce the scene width
+            if (sceneWidth + toolbarBounds.width() > availableWidth) {
+                sceneWidth = availableWidth - toolbarBounds.width();
+            }
+            toolbarBounds = toolbar.layout(context, x + sceneWidth, y, availableWidth - sceneWidth);
         }
-        toolbarBounds = toolbar.layout(context, x + sceneWidth, y, availableWidth - sceneWidth);
 
         // Enforce a minimum width
         if (sceneWidth < 10) {
@@ -176,14 +179,16 @@ public class LytGuidebookScene extends LytBox {
         return interactive;
     }
 
-    public void setBackground(ColorValue background) {
+    public void setBackground(@Nullable ColorValue background) {
         this.background = background;
     }
 
+    @Override
     public boolean isFullWidth() {
         return fullWidth;
     }
 
+    @Override
     public void setFullWidth(boolean fullWidth) {
         this.fullWidth = fullWidth;
     }
@@ -279,10 +284,6 @@ public class LytGuidebookScene extends LytBox {
         }
 
         @Override
-        public void renderBatch(RenderContext context, MultiBufferSource buffers) {
-        }
-
-        @Override
         public void render(RenderContext context) {
             if (background != null) {
                 context.fillRect(bounds, background);
@@ -292,17 +293,18 @@ public class LytGuidebookScene extends LytBox {
                 return;
             }
 
-            var window = Minecraft.getInstance().getWindow();
+            var mc = Minecraft.getMinecraft();
+            var factor = new ScaledResolution(mc).getScaleFactor();
 
             context.pushScissor(bounds);
 
             // transform our document viewport into physical screen coordinates
-            var viewport = bounds.transform(context.poseStack().last().pose());
-            RenderSystem.viewport(
-                    (int) (viewport.x() * window.getGuiScale()),
-                    (int) (window.getHeight() - viewport.bottom() * window.getGuiScale()),
-                    (int) (viewport.width() * window.getGuiScale()),
-                    (int) (viewport.height() * window.getGuiScale()));
+            var viewport = bounds.transform(context.pose());
+            GlStateManager.viewport(
+                    viewport.x() * factor,
+                    mc.displayHeight - viewport.bottom() * factor,
+                    viewport.width() * factor,
+                    viewport.height() * factor);
 
             var renderer = GuidebookLevelRenderer.getInstance();
 
@@ -322,7 +324,7 @@ public class LytGuidebookScene extends LytBox {
 
             renderDebugCrosshairs();
 
-            RenderSystem.viewport(0, 0, window.getWidth(), window.getHeight());
+            GlStateManager.viewport(0, 0, mc.displayWidth, mc.displayHeight);
 
             if (!hideAnnotations) {
                 renderOverlayAnnotations(scene, context);
@@ -335,25 +337,49 @@ public class LytGuidebookScene extends LytBox {
          * Render one in 2D space at 0,0. And render one in 3D space at 0,0,0.
          */
         private void renderDebugCrosshairs() {
-            if (!GuideMEClient.instance().isShowDebugGuiOverlays()) {
+            if (!GuideMEClient.isShowDebugGuiOverlays() || scene == null) {
                 return;
             }
 
-            RenderSystem.renderCrosshair(16);
+            // 2D coordinate axis
 
-            RenderSystem.backupProjectionMatrix();
-            RenderSystem.setProjectionMatrix(scene.getCameraSettings().getProjectionMatrix(),
-                    VertexSorting.ORTHOGRAPHIC_Z);
-            var modelViewStack = RenderSystem.getModelViewStack();
-            modelViewStack.pushPose();
-            modelViewStack.setIdentity();
-            modelViewStack.mulPoseMatrix(scene.getCameraSettings().getViewMatrix());
-            RenderSystem.applyModelViewMatrix();
+            GlStateManager.matrixMode(GL11.GL_PROJECTION);
+            GlStateManager.pushMatrix();
+            GlStateManager.loadIdentity();
+            GlStateManager.ortho(0, bounds.width(), bounds.height(), 0, 1000, 3000);
 
-            RenderSystem.renderCrosshair(2);
-            modelViewStack.popPose();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.restoreProjectionMatrix();
+            GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+            GlStateManager.pushMatrix();
+            GlStateManager.loadIdentity();
+            GlStateManager.translate(0, 0, -2000);
+
+            OpenGlHelper.renderDirections(16);
+
+            GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+            GlStateManager.popMatrix();
+            GlStateManager.matrixMode(GL11.GL_PROJECTION);
+            GlStateManager.popMatrix();
+
+            // 3D coordinate axis
+
+            GlStateManager.matrixMode(GL11.GL_PROJECTION);
+            GlStateManager.pushMatrix();
+            GlStateManager.loadIdentity();
+            CameraSettings.multiply(scene.getCameraSettings().getProjectionMatrix());
+
+            GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+            GlStateManager.pushMatrix();
+            GlStateManager.loadIdentity();
+            CameraSettings.multiply(scene.getCameraSettings().getViewMatrix());
+
+            OpenGlHelper.renderDirections(2);
+
+            GlStateManager.matrixMode(GL11.GL_MODELVIEW);
+            GlStateManager.popMatrix();
+            GlStateManager.matrixMode(GL11.GL_PROJECTION);
+            GlStateManager.popMatrix();
+
+            GlStateManager.matrixMode(GL11.GL_MODELVIEW); // Reset to default
         }
 
         @Override
@@ -384,7 +410,7 @@ public class LytGuidebookScene extends LytBox {
             }
 
             var hitResult = scene.pickBlock(docPoint, bounds);
-            if (hitResult.getType() == HitResult.Type.BLOCK) {
+            if (hitResult.typeOfHit == RayTraceResult.Type.BLOCK) {
                 var blockState = scene.getLevel().getBlockState(hitResult.getBlockPos());
 
                 for (var strategy : extensions.get(ImplicitAnnotationStrategy.EXTENSION_POINT)) {
@@ -397,7 +423,7 @@ public class LytGuidebookScene extends LytBox {
                 if (annotation == null) {
                     annotation = InWorldBoxAnnotation.forBlock(hitResult.getBlockPos(),
                             SymbolicColor.IN_WORLD_BLOCK_HIGHLIGHT);
-                    annotation.setTooltipContent(Component.translatable(blockState.getBlock().getDescriptionId()));
+                    annotation.setTooltipContent(blockState.getBlock().getLocalizedName());
                 }
                 setTransientHoveredAnnotation(annotation);
 
@@ -414,7 +440,7 @@ public class LytGuidebookScene extends LytBox {
 
         @Override
         public boolean mouseClicked(GuideUiHost screen, int x, int y, int button) {
-            if (interactive) {
+            if (interactive && scene != null) {
                 if (button == 0 || button == 1) {
                     var cameraSettings = scene.getCameraSettings();
                     buttonDown = button;
@@ -442,7 +468,7 @@ public class LytGuidebookScene extends LytBox {
 
         @Override
         public boolean mouseMoved(GuideUiHost screen, int x, int y) {
-            if (interactive && pointDown != null) {
+            if (interactive && scene != null && pointDown != null) {
                 var dx = x - pointDown.x;
                 var dy = y - pointDown.y;
                 if (buttonDown == 0) {
@@ -525,10 +551,21 @@ public class LytGuidebookScene extends LytBox {
         }
 
         private void renderOverlayAnnotations(GuidebookScene scene, RenderContext context) {
+            boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+            boolean depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+            GlStateManager.disableDepth();
+            GlStateManager.depthMask(false);
+
             for (var annotation : scene.getOverlayAnnotations()) {
                 // Determine where it would be on screen
                 annotation.render(scene, context, bounds);
             }
+
+            if (depth)
+                GlStateManager.enableDepth();
+            else
+                GlStateManager.disableDepth();
+            GlStateManager.depthMask(depthMask);
         }
     }
 }

@@ -2,29 +2,15 @@ package guideme.internal;
 
 import guideme.Guides;
 import guideme.PageAnchor;
+import guideme.compiler.IdUtils;
 import guideme.internal.screen.GuideScreen;
-import guideme.internal.util.Platform;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import net.minecraft.Util;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.LoadingOverlay;
-import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.commands.Commands;
-import net.minecraft.resources.RegistryDataLoader;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.RegistryLayer;
-import net.minecraft.server.ReloadableServerResources;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.repository.PackRepository;
-import net.minecraft.server.packs.repository.ServerPacksSource;
-import net.minecraft.server.packs.resources.MultiPackResourceManager;
-import net.minecraft.world.flag.FeatureFlagSet;
-import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraft.client.gui.GuiMainMenu;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -39,41 +25,44 @@ public final class GuideOnStartup {
     private GuideOnStartup() {
     }
 
-    public static void init(IEventBus modBus) {
-
+    public static void init() {
         var guidesToValidate = getGuideIdsToValidate();
         var showOnStartup = getShowOnStartup();
 
         if (!guidesToValidate.isEmpty() || showOnStartup != null) {
             var guideOpenedOnce = new MutableBoolean(false);
-            MinecraftForge.EVENT_BUS.addListener((ScreenEvent.Opening e) -> {
-                if (e.getNewScreen() instanceof TitleScreen && !guideOpenedOnce.booleanValue()) {
-                    guideOpenedOnce.setTrue();
-                    GuideOnStartup.runDatapackReload();
+            MinecraftForge.EVENT_BUS.register(new Object() {
+                @SubscribeEvent
+                public void onGuiOpen(GuiOpenEvent e) {
+                    if (e.getGui() instanceof GuiMainMenu && !guideOpenedOnce.booleanValue()) {
+                        guideOpenedOnce.setTrue();
 
-                    for (var guideId : guidesToValidate) {
-                        var guide = GuideRegistry.getById(guideId);
-                        if (guide == null) {
-                            LOG.error("Cannot validate guide '{}' since it does not exist.", guideId);
-                        } else {
-                            guide.validateAll();
+                        for (var guideId : guidesToValidate) {
+                            var guide = GuideRegistry.getById(guideId);
+                            if (guide == null) {
+                                LOG.error("Cannot validate guide '{}' since it does not exist.", guideId);
+                            } else {
+                                guide.validateAll();
+                            }
                         }
-                    }
 
-                    if (showOnStartup != null) {
-                        var guide = Guides.getById(showOnStartup.guideId);
-                        if (guide == null) {
-                            LOG.error("Cannot show guide '{}' since it does not exist.", showOnStartup.guideId);
-                        } else {
-                            try {
-                                var anchor = showOnStartup.anchor;
-                                if (anchor == null) {
-                                    anchor = PageAnchor.page(guide.getStartPage());
+                        if (showOnStartup != null) {
+                            var guide = Guides.getById(showOnStartup.guideId);
+                            if (guide == null) {
+                                LOG.error("Cannot show guide '{}' since it does not exist.", showOnStartup.guideId);
+                            } else {
+                                try {
+                                    var anchor = showOnStartup.anchor;
+                                    if (anchor == null) {
+                                        anchor = PageAnchor.page(guide.getStartPage());
+                                    }
+                                    var screen = GuideScreen.openNew(guide, anchor);
+                                    screen.setReturnToOnClose(e.getGui());
+                                    e.setGui(screen);
+                                } catch (Exception ex) {
+                                    LOG.error("Failed to open {}", showOnStartup, ex);
+                                    System.exit(1);
                                 }
-                                e.setNewScreen(GuideScreen.openNew(guide, anchor));
-                            } catch (Exception ex) {
-                                LOG.error("Failed to open {}", showOnStartup, ex);
-                                System.exit(1);
                             }
                         }
                     }
@@ -92,7 +81,7 @@ public final class GuideOnStartup {
         }
 
         var parts = showOnStartup.split("!", 2);
-        var guideId = new ResourceLocation(parts[0]);
+        var guideId = IdUtils.parse(parts[0]);
         PageAnchor page = null;
         if (parts.length > 1) {
             page = PageAnchor.parse(parts[1]);
@@ -106,82 +95,10 @@ public final class GuideOnStartup {
         if (validateGuideIds != null) {
             var guideIds = validateGuideIds.split(",");
             for (String guideId : guideIds) {
-                guidesToValidate.add(new ResourceLocation(guideId));
+                guidesToValidate.add(IdUtils.parse(guideId));
             }
         }
         return guidesToValidate;
-    }
-
-    /**
-     * Returns a future that resolves when the client finished starting up.
-     */
-    public static CompletableFuture<Minecraft> afterClientStart(IEventBus modEventBus) {
-        var future = new CompletableFuture<Minecraft>();
-
-        modEventBus.addListener((FMLClientSetupEvent evt) -> {
-            var client = Minecraft.getInstance();
-            CompletableFuture<?> reload;
-
-            if (client.getOverlay() instanceof LoadingOverlay loadingOverlay) {
-                reload = loadingOverlay.reload.done();
-            } else {
-                reload = CompletableFuture.completedFuture(null);
-            }
-
-            reload.whenCompleteAsync((o, throwable) -> {
-                if (throwable != null) {
-                    future.completeExceptionally(throwable);
-                } else {
-                    future.complete(client);
-                }
-            }, client);
-        });
-
-        return future;
-    }
-
-    // Run a fake datapack reload to properly compile the page (Recipes, Tags, etc.)
-    // Only used when we try to compile pages before entering a world (validation, show on startup)
-    public static void runDatapackReload() {
-        try {
-            var layeredAccess = RegistryLayer.createRegistryAccess();
-
-            PackRepository packRepository = new PackRepository(new ServerPacksSource());
-            net.minecraftforge.resource.ResourcePackLoader.loadResourcePacks(packRepository,
-                    net.minecraftforge.server.ServerLifecycleHooks::buildPackFinder);
-            packRepository.reload();
-            packRepository.setSelected(packRepository.getAvailableIds());
-
-            var resourceManager = new MultiPackResourceManager(PackType.SERVER_DATA,
-                    packRepository.openAllSelected());
-
-            var worldgenLayer = RegistryDataLoader.load(
-                    resourceManager,
-                    layeredAccess.getAccessForLoading(RegistryLayer.WORLDGEN),
-                    RegistryDataLoader.WORLDGEN_REGISTRIES);
-            layeredAccess = layeredAccess.replaceFrom(RegistryLayer.WORLDGEN, worldgenLayer);
-
-            var stuff = ReloadableServerResources.loadResources(
-                    resourceManager,
-                    layeredAccess.getAccessForLoading(RegistryLayer.RELOADABLE),
-                    FeatureFlagSet.of(),
-                    Commands.CommandSelection.ALL,
-                    0,
-                    Util.backgroundExecutor(),
-                    command -> {
-                        try {
-                            command.run();
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            throw e;
-                        }
-                    }).get();
-            stuff.updateRegistryTags(layeredAccess.compositeAccess());
-            Platform.fallbackClientRecipeManager = stuff.getRecipeManager();
-            Platform.fallbackClientRegistryAccess = layeredAccess.compositeAccess();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
 }

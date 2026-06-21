@@ -1,27 +1,26 @@
 package guideme;
 
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.google.gson.JsonObject;
+import guideme.internal.util.JsonParseUtil;
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.ExtraCodecs;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.text.ITextComponent;
 
 /**
  * Configuration settings for the automatically generated guide item.
  */
-public record GuideItemSettings(Optional<Component> displayName,
-        List<Component> tooltipLines,
-        Optional<ResourceLocation> itemModel) {
+public record GuideItemSettings(Optional<ITextComponent> displayName,
+        List<ITextComponent> tooltipLines, Optional<ResourceLocation> itemModel) {
+
     public static GuideItemSettings DEFAULT = new GuideItemSettings(Optional.empty(), List.of(), Optional.empty());
 
-    public static Codec<GuideItemSettings> CODEC = RecordCodecBuilder.create(
-            builder -> builder.group(
-                    ExtraCodecs.COMPONENT.optionalFieldOf("display_name")
-                            .forGetter(GuideItemSettings::displayName),
-                    ExtraCodecs.COMPONENT.listOf().optionalFieldOf("tooltip_lines", List.of())
-                            .forGetter(GuideItemSettings::tooltipLines),
-                    ResourceLocation.CODEC.optionalFieldOf("model").forGetter(GuideItemSettings::itemModel))
-                    .apply(builder, GuideItemSettings::new));
+    public static GuideItemSettings parse(JsonObject object) {
+        return new GuideItemSettings(
+                JsonParseUtil.getOptional(object, "display_name")
+                        .map(element -> ITextComponent.Serializer.jsonToComponent(element.toString())),
+                JsonParseUtil.getList(object, "tooltip_lines",
+                        element -> ITextComponent.Serializer.jsonToComponent(element.toString())),
+                JsonParseUtil.getOptionalString(object, "model").map(JsonParseUtil::parseId));
+    }
 }

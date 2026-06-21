@@ -4,22 +4,19 @@ import guideme.compiler.IdUtils;
 import guideme.compiler.PageCompiler;
 import guideme.compiler.tags.MdxAttrs;
 import guideme.document.LytErrorSink;
+import guideme.internal.util.SNBTUtil;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.scene.GuidebookScene;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
-import net.minecraft.ResourceLocationException;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtUtils;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.levelgen.SingleThreadedRandomSource;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.gen.structure.template.PlacementSettings;
+import net.minecraft.world.gen.structure.template.Template;
 
 /**
  * Imports a structure into the scene.
@@ -41,12 +38,12 @@ public class ImportStructureElementCompiler implements SceneElementTagCompiler {
             return;
         }
 
-        var pos = MdxAttrs.getBlockPos(compiler, errorSink, el, "pos", BlockPos.ZERO);
+        var pos = MdxAttrs.getBlockPos(compiler, errorSink, el, "pos", BlockPos.ORIGIN);
 
         ResourceLocation absStructureSrc;
         try {
             absStructureSrc = IdUtils.resolveLink(structureSrc, compiler.getPageId());
-        } catch (ResourceLocationException e) {
+        } catch (IdUtils.ResourceLocationException e) {
             errorSink.appendError(compiler, "Invalid structure path: " + structureSrc, el);
             return;
         }
@@ -57,29 +54,23 @@ public class ImportStructureElementCompiler implements SceneElementTagCompiler {
             return;
         }
 
-        CompoundTag compoundTag;
+        NBTTagCompound compoundTag;
         try {
             if (absStructureSrc.getPath().toLowerCase(Locale.ROOT).endsWith(".snbt")) {
-                compoundTag = NbtUtils.snbtToStructure(
-                        new String(structureNbtData, StandardCharsets.UTF_8));
+                compoundTag = SNBTUtil.snbtToStructure(new String(structureNbtData, StandardCharsets.UTF_8));
             } else {
-                compoundTag = NbtIo.readCompressed(new ByteArrayInputStream(structureNbtData));
+                compoundTag = CompressedStreamTools.readCompressed(new ByteArrayInputStream(structureNbtData));
             }
         } catch (Exception e) {
             errorSink.appendError(compiler, "Couldn't read structure: " + e.getMessage(), el);
             return;
         }
 
-        var template = new StructureTemplate();
-        var blocks = scene.getLevel().registryAccess().registryOrThrow(Registries.BLOCK).asLookup();
-        template.load(blocks, compoundTag);
-        var random = new SingleThreadedRandomSource(0L);
-        var settings = new StructurePlaceSettings();
+        var template = new Template();
+        template.read(compoundTag);
+        var settings = new PlacementSettings();
         settings.setIgnoreEntities(true); // Entities need a server level in structures
 
-        var fakeServerLevel = new FakeForwardingServerLevel(scene.getLevel());
-        if (!template.placeInWorld(fakeServerLevel, pos, pos, settings, random, 0)) {
-            errorSink.appendError(compiler, "Failed to place structure", el);
-        }
+        template.addBlocksToWorld(scene.getLevel(), pos, settings, 0);
     }
 }

@@ -10,9 +10,8 @@ import guideme.render.GuiSprite;
 import guideme.render.RenderContext;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.Ingredient;
 
 /**
  * Renders a standard Minecraft GUI slot.
@@ -32,7 +31,7 @@ public class LytSlot extends LytBlock implements InteractiveElement {
     private final ItemStack[] stacks;
 
     public LytSlot(Ingredient ingredient) {
-        this.stacks = ingredient.getItems();
+        this.stacks = ingredient.getMatchingStacks();
     }
 
     public LytSlot(ItemStack stack) {
@@ -69,11 +68,6 @@ public class LytSlot extends LytBlock implements InteractiveElement {
     }
 
     @Override
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
-
-    }
-
-    @Override
     public void render(RenderContext context) {
         var x = bounds.x();
         var y = bounds.y();
@@ -102,7 +96,8 @@ public class LytSlot extends LytBlock implements InteractiveElement {
         if (stack.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new ItemTooltip(stack));
+        // For slots that already show the item, we don't show it in the tooltip
+        return Optional.of(new ItemTooltip(stack, ItemStack.EMPTY));
     }
 
     private ItemStack getDisplayedStack() {

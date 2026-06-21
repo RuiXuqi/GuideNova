@@ -1,12 +1,15 @@
 {
   "required": false,
-  "minVersion": "0.8.3",
   "package": "guideme.internal.hooks.mixins",
-  "compatibilityLevel": "JAVA_11",
+  "compatibilityLevel": "JAVA_25",
+  "target": "@env(DEFAULT)",
   "client": [
     "LuceneVectorizationMixin"
   ],
+  "mixins": [],
   "server": [],
+  "setSourceFile": true,
+  "minVersion": "0.8.7",
   "injectors": {
     "defaultRequire": 0
   }

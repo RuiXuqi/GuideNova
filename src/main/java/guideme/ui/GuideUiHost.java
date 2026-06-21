@@ -6,7 +6,7 @@ import guideme.document.LytPoint;
 import guideme.document.LytRect;
 import guideme.document.interaction.InteractiveElement;
 import guideme.internal.screen.GuideNavigation;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public interface GuideUiHost {

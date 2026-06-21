@@ -20,10 +20,8 @@ package guideme.internal.util;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.world.inventory.InventoryMenu;
-import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.level.material.Fluids;
-import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.minecraft.client.renderer.texture.TextureMap;
+import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 
 /**
@@ -35,19 +33,18 @@ public final class FluidBlitter {
     }
 
     public static Blitter create(FluidStack stack) {
-        if (stack.isEmpty() && stack.getRawFluid() != Fluids.EMPTY) {
-            stack = new FluidStack(stack.getRawFluid(), 1, stack.getTag());
+        if (stack.amount <= 0) {
+            stack = new FluidStack(stack, 1);
         }
 
         Fluid fluid = stack.getFluid();
 
-        var attributes = IClientFluidTypeExtensions.of(fluid);
-        TextureAtlasSprite sprite = Minecraft.getInstance()
-                .getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
-                .apply(attributes.getStillTexture(stack));
+        TextureAtlasSprite sprite = Minecraft.getMinecraft()
+                .getTextureMapBlocks()
+                .getAtlasSprite(fluid.getStill(stack).toString());
 
-        return Blitter.sprite(sprite)
-                .colorRgb(attributes.getTintColor(stack))
+        return Blitter.sprite(TextureMap.LOCATION_BLOCKS_TEXTURE, sprite)
+                .colorRgb(fluid.getColor(stack))
                 // Most fluid texture have transparency, but we want an opaque slot
                 .blending(false);
     }

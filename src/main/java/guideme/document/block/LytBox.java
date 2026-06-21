@@ -6,7 +6,6 @@ import guideme.layout.LayoutContext;
 import guideme.render.RenderContext;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.client.renderer.MultiBufferSource;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class LytBox extends LytBlock implements LytBlockContainer {
@@ -113,28 +112,18 @@ public abstract class LytBox extends LytBlock implements LytBlockContainer {
     }
 
     @Override
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
-        context.poseStack().pushPose();
-        context.poseStack().translate(0, 0, 0.1);
-        for (var child : children) {
-            child.renderBatch(context, buffers);
-        }
-        context.poseStack().popPose();
-    }
-
-    @Override
     public void render(RenderContext context) {
         if (backgroundColor != null) {
             context.fillRect(bounds, backgroundColor);
         }
 
-        context.poseStack().pushPose();
-        context.poseStack().translate(0, 0, 0.1);
+        context.push();
+        context.translate(0, 0, 0.1F);
         for (var child : children) {
             child.render(context);
         }
 
-        context.poseStack().translate(0, 0, 0.1);
+        context.translate(0, 0, 0.1F);
         // Render border on top of children
         borderRenderer.render(
                 context,
@@ -143,7 +132,6 @@ public abstract class LytBox extends LytBlock implements LytBlockContainer {
                 getBorderLeft(),
                 getBorderRight(),
                 getBorderBottom());
-
-        context.poseStack().popPose();
+        context.pop();
     }
 }

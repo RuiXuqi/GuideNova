@@ -38,7 +38,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
-import net.minecraft.world.item.crafting.RecipeType;
 
 public final class DefaultExtensions {
     private static final List<Registration<?>> EXTENSIONS = List.of(
@@ -105,10 +104,8 @@ public final class DefaultExtensions {
     private static List<RecipeTypeMappingSupplier> vanillaRecipeTypes() {
         return List.of(
                 mappings -> {
-                    mappings.add(RecipeType.CRAFTING, VanillaRecipes::createCrafting);
-                    mappings.add(RecipeType.BLASTING, VanillaRecipes::createBlasting);
-                    mappings.add(RecipeType.SMELTING, VanillaRecipes::createSmelting);
-                    mappings.add(RecipeType.SMITHING, VanillaRecipes::createSmithing);
+                    mappings.add(VanillaRecipes.crafting());
+                    mappings.add(VanillaRecipes.smelting());
                 });
     }
 

@@ -4,7 +4,7 @@ import guideme.compiler.PageCompiler;
 import guideme.extensions.Extension;
 import guideme.extensions.ExtensionPoint;
 import java.util.Locale;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**

@@ -1,20 +1,23 @@
 package guideme.internal;
 
 import guideme.PageAnchor;
+import guideme.internal.command.GuideCommand;
+import guideme.internal.command.StructureCommands;
 import guideme.internal.network.OpenGuideRequest;
 import java.util.Optional;
 import java.util.stream.Stream;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
-import net.minecraftforge.network.PacketDistributor;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import org.jetbrains.annotations.Nullable;
 
-class GuideMEServerProxy implements GuideMEProxy {
+public class GuideMEServerProxy implements GuideMEProxy {
     @Override
-    public boolean openGuide(Player player, ResourceLocation id) {
-        if (player instanceof ServerPlayer serverPlayer) {
-            GuideME.instance().sendPacket(PacketDistributor.PLAYER.with(() -> serverPlayer), new OpenGuideRequest(id));
+    public boolean openGuide(EntityPlayer player, ResourceLocation id) {
+        if (player instanceof EntityPlayerMP serverPlayer) {
+            GuideME.instance().sendPacket(serverPlayer, new OpenGuideRequest(id));
             return true;
         }
 
@@ -22,10 +25,9 @@ class GuideMEServerProxy implements GuideMEProxy {
     }
 
     @Override
-    public boolean openGuide(Player player, ResourceLocation guideId, @Nullable PageAnchor anchor) {
-        if (player instanceof ServerPlayer serverPlayer) {
-            GuideME.instance().sendPacket(PacketDistributor.PLAYER.with(() -> serverPlayer),
-                    new OpenGuideRequest(guideId, Optional.ofNullable(anchor)));
+    public boolean openGuide(EntityPlayer player, ResourceLocation guideId, @Nullable PageAnchor anchor) {
+        if (player instanceof EntityPlayerMP serverPlayer) {
+            GuideME.instance().sendPacket(serverPlayer, new OpenGuideRequest(guideId, Optional.ofNullable(anchor)));
             return true;
         }
 
@@ -40,5 +42,18 @@ class GuideMEServerProxy implements GuideMEProxy {
     @Override
     public Stream<ResourceLocation> getAvailablePages(ResourceLocation guideId) {
         return Stream.empty();
+    }
+
+    @Override
+    public void preInit(FMLPreInitializationEvent event) {
+        GuideMEConfig.init(event.getSuggestedConfigurationFile(), event.getSide());
+    }
+
+    @Override
+    public void serverStarting(FMLServerStartingEvent event) {
+        var command = new GuideCommand();
+        event.registerServerCommand(command);
+        if (event.getSide().isClient())
+            StructureCommands.register(command);
     }
 }

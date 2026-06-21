@@ -134,7 +134,7 @@ public class GfmStrikethroughSyntax extends Extension {
                 Assert.check(code == Codes.tilde, "expected `~`");
 
                 if (previous == Codes.tilde &&
-                        !events.get(events.size() - 1).token().type.equals(Types.characterEscape)) {
+                        !events.getLast().token().type.equals(Types.characterEscape)) {
                     return nok.step(code);
                 }
 

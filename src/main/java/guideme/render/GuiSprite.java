@@ -1,13 +1,13 @@
 package guideme.render;
 
 import guideme.color.LightDarkMode;
+import guideme.compiler.IdUtils;
 import guideme.internal.GuideMEClient;
+import guideme.internal.atlas.GuiAtlasSprite;
 import java.io.IOException;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceMetadata;
+import net.minecraft.util.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,20 +45,20 @@ public final class GuiSprite {
         }
 
         synchronized (this) {
-            var guiSprites = GuideMEClient.instance().getGuiSpriteAtlas();
+            var guiSprites = GuideMEClient.GUI_ATLAS;
 
-            var sprite = guiSprites.getSprite(id);
-            var spriteScaling = getSpriteScaling(id);
-            var darkId = id.withSuffix("_darkmode");
-            var darkSprite = guiSprites.getSprite(darkId);
+            var sprite = guiSprites.getAtlasSprite(id.toString());
+            var spriteScaling = getSpriteScaling(id, sprite);
+            var darkId = IdUtils.withSuffix(id, "_darkmode");
+            var darkSprite = guiSprites.getAtlasSprite(darkId.toString());
 
-            if (darkSprite.contents().name().equals(MissingTextureAtlasSprite.getLocation())) {
+            if (darkSprite.getIconName().equals(guiSprites.getMissingSprite().getIconName())) {
                 // Use the light sprite as the dark sprite
                 darkId = id;
                 darkSprite = sprite;
             } else {
                 // Ensure people avoid the foot-gun of using different scaling
-                var darkScaling = getSpriteScaling(id);
+                var darkScaling = getSpriteScaling(darkId, sprite);
                 if (!darkScaling.equals(spriteScaling)) {
                     LOG.warn(
                             "Dark-mode sprite {} uses different sprite-scaling from the light-mode version. Please ensure the same .mcmeta file content is used.",
@@ -75,24 +75,16 @@ public final class GuiSprite {
         }
     }
 
-    private GuiSpriteScaling getSpriteScaling(ResourceLocation id) {
-        var resource = Minecraft.getInstance().getResourceManager().getResource(
-                id.withPrefix("textures/gui/sprites/").withSuffix(".png")).orElse(null);
+    private static GuiSpriteScaling getSpriteScaling(ResourceLocation id, TextureAtlasSprite sprite) {
+        var location = sprite instanceof GuiAtlasSprite atlasSprite ? atlasSprite.getTextureLocation()
+                : IdUtils.withPrefixAndSuffix(id, "textures/gui/sprites/", ".png");
 
-        if (resource == null) {
-            return GuiSpriteScaling.DEFAULT;
-        }
-
-        ResourceMetadata metadata;
-        try {
-            metadata = resource.metadata();
+        try (var resource = Minecraft.getMinecraft().getResourceManager().getResource(location)) {
+            GuiSpriteScaling scaling = resource.getMetadata(GuiSpriteScaling.SECTION_NAME);
+            return scaling != null ? scaling : GuiSpriteScaling.DEFAULT;
         } catch (IOException e) {
             LOG.error("Failed to load metadata for {}", id, e);
             return GuiSpriteScaling.DEFAULT;
-        }
-
-        try {
-            return metadata.getSection(GuiSpriteScaling.SERIALIZER).orElse(GuiSpriteScaling.DEFAULT);
         } catch (Exception e) {
             LOG.error("Failed to read sprite scaling for {}", id, e);
             return GuiSpriteScaling.DEFAULT;

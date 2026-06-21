@@ -27,15 +27,14 @@ import guideme.scene.LytItemImage;
 import guideme.style.BorderStyle;
 import guideme.ui.GuideUiHost;
 import guideme.ui.UiPoint;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.text.Style;
+import net.minecraft.util.text.TextFormatting;
 import org.jetbrains.annotations.Nullable;
 
 public class GuideSearchScreen extends DocumentScreen {
@@ -46,40 +45,38 @@ public class GuideSearchScreen extends DocumentScreen {
 
     private static final int MIN_TITLE_HEIGHT = 16;
 
-    private final EditBox searchField;
+    private final GuideEditBox searchField;
 
     private final Guide guide;
 
     private final NavigationToolbar toolbar;
 
     @Nullable
-    private Screen returnToOnClose;
+    private GuiScreen returnToOnClose;
 
     private final LytDocument searchResultsDoc = new LytDocument();
 
     private final List<GuideSearch.SearchResult> searchResults = new ArrayList<>();
 
     GuideSearchScreen(Guide guide) {
-        super(Component.literal("AE2 Guidebook Search"));
         this.guide = guide;
         this.toolbar = new NavigationToolbar(guide);
         this.toolbar.setCloseCallback(this::onClose);
 
         // Trigger indexing of this guide
-        GuideMEClient.instance().getSearch().index(guide);
+        GuideMEClient.SEARCH.index(guide);
 
-        searchField = new EditBox(
-                Minecraft.getInstance().font,
+        searchField = new GuideEditBox(
+                Minecraft.getMinecraft().fontRenderer,
                 16,
                 6,
                 0,
-                14,
-                GuidebookText.Search.text());
-        searchField.setBordered(false);
-        searchField.setHint(
-                GuidebookText.Search.text().withStyle(ChatFormatting.DARK_GRAY).withStyle(ChatFormatting.ITALIC));
+                14);
+        searchField.setEnableBackgroundDrawing(false);
+        searchField.setHint(GuidebookText.Search.text().setStyle(new Style()
+                .setColor(TextFormatting.DARK_GRAY).setItalic(true)).getFormattedText());
         searchField.setResponder(this::search);
-        setInitialFocus(searchField);
+        searchField.setFocused(true);
     }
 
     public static GuideSearchScreen open(Guide guide, @Nullable String anchor) {
@@ -88,7 +85,7 @@ public class GuideSearchScreen extends DocumentScreen {
 
         var screen = new GuideSearchScreen(guide);
         if (anchor != null) {
-            screen.searchField.setValue(anchor);
+            screen.searchField.setText(anchor);
         }
         return screen;
     }
@@ -107,16 +104,14 @@ public class GuideSearchScreen extends DocumentScreen {
     }
 
     @Override
-    protected void init() {
-        super.init();
+    public void initGui() {
+        super.initGui();
 
-        addRenderableWidget(searchField);
-
-        toolbar.addToScreen(this::addRenderableWidget);
+        toolbar.addToScreen(this::addButton);
         toolbar.update();
 
-        searchField.setX(screenRect.x() + 16);
-        searchField.setWidth(screenRect.right() - searchField.getX() - toolbar.getWidth());
+        searchField.x = screenRect.x() + 16;
+        searchField.width = screenRect.right() - searchField.x - toolbar.getWidth();
         searchField.setCursorPosition(searchField.getCursorPosition());
 
         if (screenRect.isEmpty()) {
@@ -125,7 +120,7 @@ public class GuideSearchScreen extends DocumentScreen {
 
         var left = screenRect.x();
 
-        int documentTop = searchField.getY() + searchField.getHeight();
+        int documentTop = searchField.y + searchField.height;
         var toolbarTop = (documentTop - toolbar.getHeight()) / 2;
         toolbar.move(screenRect.right() - toolbar.getWidth(), toolbarTop);
 
@@ -142,9 +137,8 @@ public class GuideSearchScreen extends DocumentScreen {
         // Update history such that forward/backwards will remember the current search query
         GlobalInMemoryHistory.get(guide).push(makeSearchAnchor());
 
-        var search = GuideMEClient.instance().getSearch();
         searchResults.clear();
-        searchResults.addAll(search.searchGuide(query, guide));
+        searchResults.addAll(GuideMEClient.SEARCH.searchGuide(query, guide));
 
         searchResultsDoc.clearContent();
 
@@ -199,59 +193,79 @@ public class GuideSearchScreen extends DocumentScreen {
 
             // Reuse the same guide screen if it's within the same guide
             if (returnToOnClose instanceof GuideUiHost guideHost && guideHost.getGuide() == guide) {
-                onClose();
+                this.onClose();
                 guideHost.navigateTo(page.getId());
             } else {
                 returnToOnClose = GuideScreen.openNew(guide, PageAnchor.page(page.getId()));
-                onClose();
+                this.onClose();
             }
         });
         return documentLink;
     }
 
     @Override
-    protected void scaledRender(GuiGraphics guiGraphics, RenderContext context, int mouseX, int mouseY,
-            float partialTick) {
+    protected void scaledRender(RenderContext context, int mouseX, int mouseY, float partialTick) {
         context.fillIcon(screenRect, GuiAssets.GUIDE_BACKGROUND, SymbolicColor.GUIDE_SCREEN_BACKGROUND);
 
         Blitter.texture(GuideME.makeId("textures/guide/buttons.png"), 64, 64)
                 .src(GuideIconButton.Role.SEARCH.iconSrcX, GuideIconButton.Role.SEARCH.iconSrcY, 16, 16)
                 .dest(screenRect.x(), 2, 16, 16)
                 .colorArgb(context.resolveColor(SymbolicColor.ICON_BUTTON_NORMAL))
-                .blit(guiGraphics);
+                .blit();
 
         var documentRect = getDocumentRect();
         context.fillRect(documentRect, new ConstantColor(0x80333333));
 
-        if (searchField.getValue().isEmpty()) {
+        if (searchField.getText().isEmpty()) {
             context.renderTextCenteredIn(
-                    GuidebookText.SearchNoQuery.text().getString(),
+                    GuidebookText.SearchNoQuery.text().getFormattedText(),
                     DefaultStyles.BODY_TEXT.mergeWith(DefaultStyles.BASE_STYLE),
                     documentRect);
         } else if (searchResults.isEmpty()) {
             context.renderTextCenteredIn(
-                    GuidebookText.SearchNoResults.text().getString(),
+                    GuidebookText.SearchNoResults.text().getFormattedText(),
                     DefaultStyles.BODY_TEXT.mergeWith(DefaultStyles.BASE_STYLE),
                     documentRect);
         } else {
             renderDocument(context);
         }
 
-        var poseStack = guiGraphics.pose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 200);
+        context.push();
+        context.translate(0, 0, 200);
 
         renderTitle(documentRect, context);
 
-        super.scaledRender(guiGraphics, context, mouseX, mouseY, partialTick);
+        searchField.drawTextBox();
+        super.scaledRender(context, mouseX, mouseY, partialTick);
 
-        poseStack.popPose();
+        context.pop();
 
-        renderDocumentTooltip(guiGraphics, mouseX, mouseY, partialTick);
+        renderDocumentTooltip(context, mouseX, mouseY, partialTick);
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics) {
+    protected boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (searchField.mouseClicked((int) mouseX, (int) mouseY, button)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (!searchField.textboxKeyTyped(typedChar, keyCode)) {
+            super.keyTyped(typedChar, keyCode);
+        }
+    }
+
+    @Override
+    public void updateScreen() {
+        super.updateScreen();
+        searchField.updateCursorCounter();
+    }
+
+    @Override
+    public void drawWorldBackground(int tint) {
         // Stub this out otherwise vanilla renders a background on top of our content
     }
 
@@ -266,10 +280,10 @@ public class GuideSearchScreen extends DocumentScreen {
     }
 
     private PageAnchor makeSearchAnchor() {
-        if (searchField.getValue().isBlank()) {
+        if (searchField.getText().isBlank()) {
             return PageAnchor.page(PAGE_ID);
         } else {
-            return new PageAnchor(PAGE_ID, searchField.getValue());
+            return new PageAnchor(PAGE_ID, searchField.getText());
         }
     }
 
@@ -287,9 +301,9 @@ public class GuideSearchScreen extends DocumentScreen {
     }
 
     @Override
-    public void onClose() {
-        if (minecraft != null && minecraft.screen == this && this.returnToOnClose != null) {
-            minecraft.setScreen(this.returnToOnClose);
+    protected void onClose() {
+        if (mc != null && mc.currentScreen == this && this.returnToOnClose != null) {
+            mc.displayGuiScreen(this.returnToOnClose);
             this.returnToOnClose = null;
             return;
         }
@@ -299,11 +313,11 @@ public class GuideSearchScreen extends DocumentScreen {
     /**
      * Sets a screen to return to when closing this guide.
      */
-    public void setReturnToOnClose(@Nullable Screen screen) {
+    public void setReturnToOnClose(@Nullable GuiScreen screen) {
         this.returnToOnClose = screen;
     }
 
-    public @Nullable Screen getReturnToOnClose() {
+    public @Nullable GuiScreen getReturnToOnClose() {
         return returnToOnClose;
     }
 

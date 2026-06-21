@@ -5,24 +5,23 @@ import guideme.internal.GuideME;
 import guideme.internal.GuideMEClient;
 import guideme.internal.GuidebookText;
 import guideme.internal.util.Blitter;
+import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.Minecraft;
+import net.minecraft.util.text.ITextComponent;
 
 /**
  * Button found in the toolbar at the top of {@link GuideScreen}.
  */
-public class GuideIconButton extends Button {
+public class GuideIconButton extends GuideButton {
     public static final int WIDTH = 16;
     public static final int HEIGHT = 16;
 
+    private final Consumer<GuideIconButton> callback;
     private Role role;
 
     public GuideIconButton(int x, int y, Role role, Runnable callback) {
-        this(x, y, role, btn -> callback.run());
+        this(x, y, role, _ -> callback.run());
     }
 
     public GuideIconButton(int x, int y, Role role, Consumer<GuideIconButton> callback) {
@@ -31,11 +30,10 @@ public class GuideIconButton extends Button {
                 y,
                 WIDTH,
                 HEIGHT,
-                role.actionText,
-                btn -> callback.accept((GuideIconButton) btn),
-                Supplier::get);
+                role.actionText.getFormattedText());
+        this.callback = callback;
         this.role = role;
-        setTooltip(Tooltip.create(getMessage()));
+        setTooltip(List.of(this.displayString));
     }
 
     public Role getRole() {
@@ -44,17 +42,17 @@ public class GuideIconButton extends Button {
 
     public void setRole(Role role) {
         this.role = role;
-        setMessage(role.actionText);
-        setTooltip(Tooltip.create(getMessage()));
+        this.displayString = role.actionText.getFormattedText();
+        setTooltip(List.of(this.displayString));
     }
 
     @Override
-    public void renderWidget(GuiGraphics guiGraphics, int i, int j, float f) {
+    protected void renderWidget(Minecraft mc, int mouseX, int mouseY, float partialTick) {
         var color = SymbolicColor.ICON_BUTTON_NORMAL;
 
-        if (!isActive()) {
+        if (!enabled) {
             color = SymbolicColor.ICON_BUTTON_DISABLED;
-        } else if (isHovered()) {
+        } else if (hovered) {
             color = SymbolicColor.ICON_BUTTON_HOVER;
         }
 
@@ -62,9 +60,14 @@ public class GuideIconButton extends Button {
 
         Blitter.texture(GuideME.makeId("textures/guide/buttons.png"), 64, 64)
                 .src(role.iconSrcX, role.iconSrcY, 16, 16)
-                .dest(getX(), getY(), 16, 16)
+                .dest(x, y, 16, 16)
                 .colorArgb(resolved)
-                .blit(guiGraphics);
+                .blit();
+    }
+
+    @Override
+    protected void onClick(double mouseX, double mouseY) {
+        this.callback.accept(this);
     }
 
     public enum Role {
@@ -80,12 +83,12 @@ public class GuideIconButton extends Button {
         OPEN_FULL_WIDTH_VIEW(GuidebookText.FullWidthView.text(), 16, 32),
         CLOSE_FULL_WIDTH_VIEW(GuidebookText.CloseFullWidthView.text(), 32, 32);
 
-        final Component actionText;
+        final ITextComponent actionText;
 
         final int iconSrcX;
         final int iconSrcY;
 
-        Role(Component actionText, int iconSrcX, int iconSrcY) {
+        Role(ITextComponent actionText, int iconSrcX, int iconSrcY) {
             this.actionText = actionText;
             this.iconSrcX = iconSrcX;
             this.iconSrcY = iconSrcY;

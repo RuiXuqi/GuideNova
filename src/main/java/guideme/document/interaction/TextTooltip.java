@@ -4,36 +4,32 @@ import guideme.siteexport.ResourceExporter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import net.minecraft.client.gui.screens.inventory.tooltip.ClientTextTooltip;
-import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
-import net.minecraft.network.chat.Component;
+import java.util.stream.Collectors;
 
 public class TextTooltip implements GuideTooltip {
-    private final List<ClientTooltipComponent> lines;
+    private final List<GuideTooltipComponent> lines;
+
+    public TextTooltip(List<String> lines) {
+        this.lines = lines.stream().map(TextTooltipComponent::new).collect(Collectors.toList());
+    }
 
     public TextTooltip(String text) {
-        this(Component.literal(text));
+        this(List.of(text));
     }
 
-    public TextTooltip(List<Component> lines) {
-        this.lines = lines.stream()
-                .<ClientTooltipComponent>map(line -> new ClientTextTooltip(line.getVisualOrderText()))
-                .toList();
-    }
-
-    public TextTooltip(Component firstLine, Component... additionalLines) {
+    public TextTooltip(String firstLine, String... additionalLines) {
         this(makeLineList(firstLine, additionalLines));
     }
 
-    private static List<Component> makeLineList(Component firstLine, Component[] additionalLines) {
-        var lines = new ArrayList<Component>(1 + additionalLines.length);
+    private static List<String> makeLineList(String firstLine, String[] additionalLines) {
+        var lines = new ArrayList<String>(1 + additionalLines.length);
         lines.add(firstLine);
         Collections.addAll(lines, additionalLines);
         return lines;
     }
 
     @Override
-    public List<ClientTooltipComponent> getLines() {
+    public List<GuideTooltipComponent> getLines() {
         return lines;
     }
 

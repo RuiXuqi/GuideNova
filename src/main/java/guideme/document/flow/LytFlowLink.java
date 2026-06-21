@@ -3,14 +3,14 @@ package guideme.document.flow;
 import guideme.PageAnchor;
 import guideme.color.SymbolicColor;
 import guideme.internal.GuideMEClient;
+import guideme.internal.util.PlatformUtil;
 import guideme.ui.GuideUiHost;
 import java.net.URI;
 import java.util.function.Consumer;
-import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ConfirmLinkScreen;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvent;
+import net.minecraft.client.audio.PositionedSoundRecord;
+import net.minecraft.client.gui.GuiConfirmOpenLink;
+import net.minecraft.util.SoundEvent;
 import org.jetbrains.annotations.Nullable;
 
 public class LytFlowLink extends LytTooltipSpan {
@@ -33,8 +33,8 @@ public class LytFlowLink extends LytTooltipSpan {
     public boolean mouseClicked(GuideUiHost screen, int x, int y, int button) {
         if (button == 0 && clickCallback != null) {
             if (clickSound != null) {
-                var handler = Minecraft.getInstance().getSoundManager();
-                handler.play(SimpleSoundInstance.forUI(clickSound, 1.0F));
+                var handler = Minecraft.getMinecraft().getSoundHandler();
+                handler.playSound(PositionedSoundRecord.getMasterRecord(clickSound, 1.0F));
             }
             clickCallback.accept(screen);
             return true;
@@ -59,15 +59,13 @@ public class LytFlowLink extends LytTooltipSpan {
         }
 
         setClickCallback(screen -> {
-            var mc = Minecraft.getInstance();
-            var previousScreen = mc.screen;
-            mc.setScreen(new ConfirmLinkScreen(yes -> {
-                if (yes) {
-                    Util.getPlatform().openUri(uri);
-                }
-
-                mc.setScreen(previousScreen);
-            }, uri.toString(), true));
+            var mc = Minecraft.getMinecraft();
+            var previousScreen = mc.currentScreen;
+            mc.displayGuiScreen(new GuiConfirmOpenLink((yes, _) -> {
+                if (yes)
+                    PlatformUtil.openUri(uri);
+                mc.displayGuiScreen(previousScreen);
+            }, uri.toString(), -1, true));
         });
     }
 

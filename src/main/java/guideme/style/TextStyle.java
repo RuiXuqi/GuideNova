@@ -1,7 +1,6 @@
 package guideme.style;
 
 import guideme.color.ColorValue;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -14,7 +13,7 @@ public record TextStyle(
         @Nullable Boolean underlined,
         @Nullable Boolean strikethrough,
         @Nullable Boolean obfuscated,
-        @Nullable ResourceLocation font,
+        @Nullable Boolean unicode,
         @Nullable ColorValue color,
         @Nullable WhiteSpaceMode whiteSpace,
         @Nullable TextAlignment alignment,
@@ -30,7 +29,7 @@ public record TextStyle(
         var underlined = this.underlined != null ? this.underlined : base.underlined();
         var strikethrough = this.strikethrough != null ? this.strikethrough : base.strikethrough();
         var obfuscated = this.obfuscated != null ? this.obfuscated : base.obfuscated();
-        var font = this.font != null ? this.font : base.font();
+        var unicode = this.unicode != null ? this.unicode : base.unicode();
         var color = this.color != null ? this.color : base.color();
         var whiteSpace = this.whiteSpace != null ? this.whiteSpace : base.whiteSpace();
         var alignment = this.alignment != null ? this.alignment : base.alignment();
@@ -42,7 +41,7 @@ public record TextStyle(
                 underlined,
                 strikethrough,
                 obfuscated,
-                font,
+                unicode,
                 color,
                 whiteSpace,
                 alignment,
@@ -57,7 +56,7 @@ public record TextStyle(
         builder.underlined = underlined;
         builder.strikethrough = strikethrough;
         builder.obfuscated = obfuscated;
-        builder.font = font;
+        builder.unicode = unicode;
         builder.color = color;
         builder.whiteSpace = whiteSpace;
         builder.alignment = alignment;
@@ -76,7 +75,7 @@ public record TextStyle(
         private Boolean underlined;
         private Boolean strikethrough;
         private Boolean obfuscated;
-        private ResourceLocation font;
+        private Boolean unicode;
         private ColorValue color;
         private WhiteSpaceMode whiteSpace;
         private TextAlignment alignment;
@@ -101,8 +100,8 @@ public record TextStyle(
             if (style.obfuscated() != null) {
                 obfuscated = style.obfuscated();
             }
-            if (style.font() != null) {
-                font = style.font();
+            if (style.unicode() != null) {
+                unicode = style.unicode();
             }
             if (style.color() != null) {
                 color = style.color();
@@ -149,8 +148,8 @@ public record TextStyle(
             return this;
         }
 
-        public Builder font(ResourceLocation font) {
-            this.font = font;
+        public Builder unicode(Boolean unicode) {
+            this.unicode = unicode;
             return this;
         }
 
@@ -181,7 +180,7 @@ public record TextStyle(
                     underlined,
                     strikethrough,
                     obfuscated,
-                    font,
+                    unicode,
                     color,
                     whiteSpace,
                     alignment,

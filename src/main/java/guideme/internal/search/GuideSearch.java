@@ -2,6 +2,7 @@ package guideme.internal.search;
 
 import guideme.Guide;
 import guideme.Guides;
+import guideme.compiler.IdUtils;
 import guideme.compiler.IndexingSink;
 import guideme.compiler.ParsedGuidePage;
 import guideme.document.DefaultStyles;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -217,8 +218,8 @@ public class GuideSearch implements AutoCloseable {
 
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
                 var document = storedFields.document(scoreDoc.doc);
-                var guideId = new ResourceLocation(document.get(IndexSchema.FIELD_GUIDE_ID));
-                var pageId = new ResourceLocation(document.get(IndexSchema.FIELD_PAGE_ID));
+                var guideId = IdUtils.parse(document.get(IndexSchema.FIELD_GUIDE_ID));
+                var pageId = IdUtils.parse(document.get(IndexSchema.FIELD_PAGE_ID));
 
                 var guide = Guides.getById(guideId);
                 if (guide == null) {

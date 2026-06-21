@@ -2,24 +2,21 @@ package guideme.document.interaction;
 
 import guideme.document.LytRect;
 import guideme.document.block.LytBlock;
-import guideme.internal.screen.IndepentScaleScreen;
-import guideme.internal.screen.ScaledGuiGraphics;
+import guideme.internal.screen.BaseScreen;
+import guideme.internal.screen.GuideButton;
 import guideme.layout.LayoutContext;
 import guideme.render.RenderContext;
 import guideme.ui.GuideUiHost;
-import java.util.Optional;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.renderer.MultiBufferSource;
+import org.lwjgl.input.Mouse;
 
 /**
- * Wraps an {@link AbstractWidget} for use within the guidebook layout tree.
+ * Wraps an {@link GuideButton} for use within the guidebook layout tree.
  */
 public class LytWidget extends LytBlock implements InteractiveElement {
-    private final AbstractWidget widget;
+    private final GuideButton widget;
 
-    public LytWidget(AbstractWidget widget) {
+    public LytWidget(GuideButton widget) {
         this.widget = widget;
     }
 
@@ -27,54 +24,42 @@ public class LytWidget extends LytBlock implements InteractiveElement {
     protected LytRect computeLayout(LayoutContext context, int x, int y, int availableWidth) {
         return new LytRect(
                 x, y,
-                widget.getWidth(), widget.getHeight());
+                widget.width, widget.height);
     }
 
     @Override
     protected void onLayoutMoved(int deltaX, int deltaY) {
-        widget.setX(widget.getX() + deltaX);
-        widget.setY(widget.getY() + deltaY);
-    }
-
-    @Override
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
+        widget.x += deltaX;
+        widget.y += deltaY;
     }
 
     @Override
     public void render(RenderContext context) {
         updateWidgetPosition();
 
-        var minecraft = Minecraft.getInstance();
+        var minecraft = Minecraft.getMinecraft();
+        var screen = minecraft.currentScreen;
 
-        if (!(minecraft.screen instanceof GuideUiHost uiHost)) {
+        if (!(screen instanceof GuideUiHost uiHost)) {
             return; // Can't render if we can't translate
         }
 
-        var mouseHandler = minecraft.mouseHandler;
-        // We use screen here so it accounts for our gui-scale independent scaling screen.
-        var xScale = (double) minecraft.screen.width / (double) minecraft.getWindow().getScreenWidth();
-        var yScale = (double) minecraft.screen.height / (double) minecraft.getWindow().getScreenHeight();
-        var mouseX = mouseHandler.xpos() * xScale;
-        var mouseY = mouseHandler.ypos() * yScale;
+        var mouseDocPos = screen instanceof BaseScreen baseScreen
+                ? uiHost.getDocumentPoint(baseScreen.getMouseX(), baseScreen.getMouseY())
+                : uiHost.getDocumentPoint(
+                        (double) (Mouse.getX() * screen.width) / minecraft.displayWidth,
+                        screen.height - (double) (Mouse.getY() * screen.height) / minecraft.displayHeight - 1);
 
-        var mouseDocPos = uiHost.getDocumentPoint(mouseX, mouseY);
-
-        // This is a bit of a hack, but since scissor checks break out of the scaled environment,
-        // we pass the scaled gui graphics to the widget to fix calls to containsPointInScissor
-        GuiGraphics guiGraphics = context.guiGraphics();
-        if (minecraft.screen instanceof IndepentScaleScreen indepentScaleScreen) {
-            guiGraphics = new ScaledGuiGraphics(minecraft, context.guiGraphics().pose(),
-                    context.guiGraphics().bufferSource(), (float) indepentScaleScreen.getEffectiveScale());
-        }
-        widget.render(
-                guiGraphics,
+        widget.drawButton(
+                minecraft,
                 mouseDocPos != null ? mouseDocPos.x() : -100,
                 mouseDocPos != null ? mouseDocPos.y() : -100,
-                minecraft.getDeltaFrameTime());
+                minecraft.getRenderPartialTicks());
     }
 
     private void updateWidgetPosition() {
-        widget.setPosition(bounds.x(), bounds.y());
+        widget.x = bounds.x();
+        widget.y = bounds.y();
     }
 
     @Override
@@ -85,7 +70,11 @@ public class LytWidget extends LytBlock implements InteractiveElement {
 
     @Override
     public boolean mouseClicked(GuideUiHost screen, int x, int y, int button) {
-        return widget.mouseClicked(x, y, button);
+        if (this.widget.mouseClicked(x, y, button)) {
+            this.widget.playPressSound(Minecraft.getMinecraft().getSoundHandler());
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -93,12 +82,9 @@ public class LytWidget extends LytBlock implements InteractiveElement {
         return widget.mouseReleased(x, y, button);
     }
 
-    @Override
-    public Optional<GuideTooltip> getTooltip(float x, float y) {
-        return Optional.empty();
-    }
+    // No tooltips
 
-    public AbstractWidget getWidget() {
+    public GuideButton getWidget() {
         return widget;
     }
 }

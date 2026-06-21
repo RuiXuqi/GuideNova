@@ -2,10 +2,9 @@ package guideme.render;
 
 import guideme.color.LightDarkMode;
 import guideme.document.LytRect;
+import guideme.ui.UiRect;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.Rect2i;
 
 class PanelBlitter {
 
@@ -46,7 +45,7 @@ class PanelBlitter {
         INNER_BOTTOM_LEFT = new SpriteSlice(inner, 6);
     }
 
-    public void addBounds(Rect2i rect) {
+    public void addBounds(UiRect rect) {
         addBounds(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
     }
 
@@ -55,14 +54,14 @@ class PanelBlitter {
         processedRects.clear();
     }
 
-    public void blit(GuiGraphics graphics, int xOffset, int yOffset) {
-        blit(graphics, xOffset, yOffset, 0, 0xFFFFFFFF);
+    public void blit(int xOffset, int yOffset) {
+        blit(xOffset, yOffset, 0, 0xFFFFFFFF);
     }
 
-    public void blit(GuiGraphics graphics, int xOffset, int yOffset, int zOffset, int color) {
+    public void blit(int xOffset, int yOffset, int zOffset, int color) {
         SpriteLayer layer = new SpriteLayer();
         render(layer, 0, color);
-        layer.render(graphics.pose(), xOffset, yOffset, zOffset);
+        layer.render(xOffset, yOffset, zOffset);
     }
 
     public void render(SpriteLayer layer, int z, int color) {

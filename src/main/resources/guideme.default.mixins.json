@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "guideme.internal.hooks.mixins",
+  "compatibilityLevel": "JAVA_25",
+  "target": "@env(DEFAULT)",
+  "client": [
+    "ForgeHooksClientMixin",
+    "StitcherMixin",
+    "TextureAtlasSpriteMixin",
+    "TextureMapMixin"
+  ],
+  "mixins": [],
+  "server": [],
+  "setSourceFile": true,
+  "minVersion": "0.8.7"
+}

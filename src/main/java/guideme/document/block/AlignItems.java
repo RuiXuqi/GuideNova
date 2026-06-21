@@ -1,9 +1,9 @@
 package guideme.document.block;
 
 import java.util.Locale;
-import net.minecraft.util.StringRepresentable;
+import net.minecraft.util.IStringSerializable;
 
-public enum AlignItems implements StringRepresentable {
+public enum AlignItems implements IStringSerializable {
     CENTER,
     START,
     END;
@@ -15,7 +15,7 @@ public enum AlignItems implements StringRepresentable {
     }
 
     @Override
-    public String getSerializedName() {
+    public String getName() {
         return serializedName;
     }
 }

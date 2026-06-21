@@ -1,9 +1,0 @@
-modLoader = "lowcodefml"
-loaderVersion = "*"
-license = "..."
-
-[[mods]]
-modId = "testmod"
-version = "0.0.0"
-displayName = "GuideME Testmod"
-description = ""

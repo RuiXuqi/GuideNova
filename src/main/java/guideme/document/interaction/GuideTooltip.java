@@ -2,8 +2,7 @@ package guideme.document.interaction;
 
 import guideme.siteexport.ExportableResourceProvider;
 import java.util.List;
-import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
 
 public interface GuideTooltip extends ExportableResourceProvider {
 
@@ -11,6 +10,6 @@ public interface GuideTooltip extends ExportableResourceProvider {
         return ItemStack.EMPTY;
     }
 
-    List<ClientTooltipComponent> getLines();
+    List<GuideTooltipComponent> getLines();
 
 }

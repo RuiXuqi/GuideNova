@@ -1,7 +1,7 @@
 package guideme.compiler;
 
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -12,5 +12,5 @@ public record FrontmatterNavigation(
         @Nullable ResourceLocation parent,
         int position,
         @Nullable ResourceLocation iconItemId,
-        @Nullable CompoundTag iconNbt) {
+        @Nullable NBTTagCompound iconNbt) {
 }

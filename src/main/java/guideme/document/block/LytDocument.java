@@ -7,11 +7,9 @@ import guideme.document.flow.LytFlowInlineBlock;
 import guideme.layout.LayoutContext;
 import guideme.layout.Layouts;
 import guideme.render.RenderContext;
-import guideme.render.SimpleRenderContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import net.minecraft.client.renderer.MultiBufferSource;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -106,26 +104,12 @@ public class LytDocument extends LytNode implements LytBlockContainer {
         return new Layout(availableWidth, bounds.height());
     }
 
-    @Deprecated(forRemoval = true)
-    public void render(SimpleRenderContext context) {
-        this.render((RenderContext) context);
-    }
-
     public void render(RenderContext context) {
         for (var block : blocks) {
             if (block.isCulled(context.viewport())) {
                 continue;
             }
             block.render(context);
-        }
-    }
-
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
-        for (var block : blocks) {
-            if (!context.intersectsViewport(block.getBounds())) {
-                continue;
-            }
-            block.renderBatch(context, buffers);
         }
     }
 

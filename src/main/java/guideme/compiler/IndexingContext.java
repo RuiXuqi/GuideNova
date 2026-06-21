@@ -7,7 +7,7 @@ import guideme.extensions.ExtensionPoint;
 import guideme.indices.PageIndex;
 import guideme.libs.mdast.model.MdAstAnyContent;
 import java.util.List;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 

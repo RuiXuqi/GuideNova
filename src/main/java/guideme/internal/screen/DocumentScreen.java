@@ -1,7 +1,5 @@
 package guideme.internal.screen;
 
-import com.mojang.blaze3d.platform.GlConst;
-import com.mojang.blaze3d.systems.RenderSystem;
 import guideme.color.ColorValue;
 import guideme.color.ConstantColor;
 import guideme.document.DefaultStyles;
@@ -16,6 +14,7 @@ import guideme.document.interaction.InteractiveElement;
 import guideme.internal.GuideMEClient;
 import guideme.internal.util.DashPattern;
 import guideme.internal.util.DashedRectangle;
+import guideme.internal.util.TooltipRenderUtil;
 import guideme.layout.LayoutContext;
 import guideme.layout.MinecraftFontMetrics;
 import guideme.render.RenderContext;
@@ -26,11 +25,11 @@ import guideme.ui.UiPoint;
 import java.util.Optional;
 import java.util.function.Function;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderHelper;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL11;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,16 +55,15 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
 
     private LytRect documentRect = LytRect.empty();
 
-    public DocumentScreen(Component title) {
-        super(title);
+    public DocumentScreen() {
         this.scrollbar = new GuideScrollbar();
     }
 
     @Override
-    protected void init() {
-        super.init();
+    public void initGui() {
+        super.initGui();
 
-        if (GuideMEClient.instance().isFullWidthLayout() || width < getMaxWidth()) {
+        if (GuideMEClient.isFullWidthLayout() || width < getMaxWidth()) {
             screenRect = new LytRect(0, 0, width, height);
         } else {
             var maxWidth = getMaxWidth();
@@ -74,7 +72,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
             screenRect = new LytRect(left, 0, screenWidth, height);
         }
 
-        addRenderableWidget(scrollbar);
+        addButton(scrollbar);
         updateDocumentLayout();
     }
 
@@ -84,15 +82,16 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
 
     @Override
     protected float calculateEffectiveScale() {
-        if (!GuideMEClient.instance().isAdaptiveScalingEnabled()) {
+        if (!GuideMEClient.isAdaptiveScalingEnabled()) {
             return 1f;
         }
 
         // The unifont is already scaled down by half at gui scale 1
         // and at scale 3 it is scaled to 150%, both look bad
         // For GUI scales 1 and 3 scale up the entire screen by 1
-        var window = Minecraft.getInstance().getWindow();
-        var currentScale = window.getGuiScale();
+        var mc = Minecraft.getMinecraft();
+        var sr = new ScaledResolution(mc);
+        var currentScale = sr.getScaleFactor();
         var effectiveScale = currentScale;
         if (currentScale == 1) {
             effectiveScale = 2;
@@ -101,8 +100,8 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
         }
 
         // Validate that when we scale up, we still are above the base width/height
-        var virtualWidth = window.getWidth() / effectiveScale;
-        var virtualHeight = window.getHeight() / effectiveScale;
+        var virtualWidth = mc.displayWidth / effectiveScale;
+        var virtualHeight = mc.displayHeight / effectiveScale;
         if (virtualWidth < 320 || virtualHeight < 240) {
             var reducedEffectiveScale = Math.max(2, currentScale - 1);
             LOG.debug("Not enough screen space ({}x{}) to increase GUI scale from {} to {}. Decreasing to {} instead.",
@@ -110,7 +109,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
             effectiveScale = reducedEffectiveScale;
         }
 
-        return (float) (effectiveScale / currentScale);
+        return (float) effectiveScale / currentScale;
     }
 
     protected final void ensureDocumentLayout() {
@@ -144,7 +143,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     public void setDocumentRect(LytRect documentRect) {
-        this.documentRect = documentRect.withWidth(documentRect.width() - scrollbar.getWidth());
+        this.documentRect = documentRect.withWidth(documentRect.width() - scrollbar.width);
         scrollbar.move(this.documentRect.right(), this.documentRect.y(), this.documentRect.height());
     }
 
@@ -155,8 +154,8 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public void tick() {
-        super.tick();
+    public void updateScreen() {
+        super.updateScreen();
 
         // Tick all controls on the page
         var document = getDocumentWithLayout();
@@ -189,31 +188,25 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
 
         // Move rendering to anchor @ 0,0 in the document rect
         var documentViewport = getDocumentViewport();
-        var poseStack = context.poseStack();
 
         // guiGraphics.enableScissor(documentRect.x(), documentRect.y(), documentRect.right(), documentRect.bottom());
         context.pushScissor(documentRect);
-        poseStack.pushPose();
-        poseStack.translate(documentRect.x() - documentViewport.x(), documentRect.y() - documentViewport.y(), 0);
-
-        // Render all text content in one large batch to improve performance
-        var buffers = context.beginBatch();
-        document.renderBatch(context, buffers);
-        context.endBatch(buffers);
+        context.push();
+        context.translate(documentRect.x() - documentViewport.x(), documentRect.y() - documentViewport.y(), 0);
 
         document.render(context);
 
         // Clear depth after rendering the document since some elements in it may render with ludicrous z-values
         // Examples: scaled up item images have to scale their depth as well due to non-uniform scaling issues
-        RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+        GlStateManager.clear(GL11.GL_DEPTH_BUFFER_BIT);
 
         context.popScissor();
 
-        if (GuideMEClient.instance().isShowDebugGuiOverlays()) {
+        if (GuideMEClient.isShowDebugGuiOverlays()) {
             renderHoverOutline(document, context);
         }
 
-        poseStack.popPose();
+        context.pop();
 
     }
 
@@ -224,11 +217,11 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
             return;
         }
 
-        context.poseStack().pushPose();
-        context.poseStack().translate(0, 0, 1000);
+        context.push();
+        context.translate(0, 0, 1000);
 
-        GL20.glLogicOp(GL20.GL_XOR);
-        GL20.glEnable(GL20.GL_COLOR_LOGIC_OP);
+        GlStateManager.colorLogicOp(GlStateManager.LogicOp.XOR);
+        GlStateManager.enableColorLogic();
 
         // Fill a rectangle highlighting margins
         if (hoveredElement.node() instanceof LytBlock block) {
@@ -256,20 +249,20 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
         }
 
         // Fill the content rectangle
-        DashedRectangle.render(context.poseStack(), hoveredElement.node().getBounds(), DEBUG_NODE_OUTLINE, 0);
+        DashedRectangle.render(hoveredElement.node().getBounds(), DEBUG_NODE_OUTLINE, 0);
 
         // Also outline any inline-elements in the block
         if (hoveredElement.content() != null) {
             if (hoveredElement.node() instanceof LytFlowContainer flowContainer) {
                 flowContainer.enumerateContentBounds(hoveredElement.content())
                         .forEach(bound -> {
-                            DashedRectangle.render(context.poseStack(), bound, DEBUG_CONTENT_OUTLINE, 0);
+                            DashedRectangle.render(bound, DEBUG_CONTENT_OUTLINE, 0);
                         });
             }
         }
 
-        GL20.glLogicOp(GL20.GL_COPY);
-        GL20.glDisable(GL20.GL_COLOR_LOGIC_OP);
+        GlStateManager.colorLogicOp(GlStateManager.LogicOp.COPY);
+        GlStateManager.disableColorLogic();
 
         // Render the class-name of the hovered node to make it easier to identify
         var bounds = hoveredElement.node().getBounds();
@@ -288,12 +281,12 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
                 bounds.x(),
                 bounds.bottom());
 
-        context.poseStack().popPose();
+        context.pop();
     }
 
     @Override
-    public void scaledMouseMoved(double mouseX, double mouseY) {
-        super.scaledMouseMoved(mouseX, mouseY);
+    public void mouseMoved(double mouseX, double mouseY) {
+        super.mouseMoved(mouseX, mouseY);
 
         if (mouseCaptureTarget != null) {
             var docPointUnclamped = getDocumentPointUnclamped(mouseX, mouseY);
@@ -309,8 +302,8 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public boolean scaledMouseClicked(double mouseX, double mouseY, int button) {
-        if (super.scaledMouseClicked(mouseX, mouseY, button)) {
+    protected boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
 
@@ -333,7 +326,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public boolean scaledMouseReleased(double mouseX, double mouseY, int button) {
+    protected boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (mouseCaptureTarget != null) {
             var currentTarget = mouseCaptureTarget;
 
@@ -346,7 +339,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
             }
         }
 
-        if (super.scaledMouseReleased(mouseX, mouseY, button)) {
+        if (super.mouseReleased(mouseX, mouseY, button)) {
             return true;
         }
 
@@ -426,25 +419,18 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public void afterMouseMove() {
-        super.afterMouseMove();
+    protected void afterMouseMove(double mouseX, double mouseY) {
+        super.afterMouseMove(mouseX, mouseY);
 
         var document = getDocumentWithLayout();
         if (document != null) {
-            var mouseHandler = minecraft.mouseHandler;
-            // We use screen here so it accounts for our gui-scale independent scaling screen.
-            var xScale = (double) minecraft.screen.width / (double) minecraft.getWindow().getScreenWidth();
-            var yScale = (double) minecraft.screen.height / (double) minecraft.getWindow().getScreenHeight();
-            var x = mouseHandler.xpos() * xScale;
-            var y = mouseHandler.ypos() * yScale;
-
             // If there's a widget under the cursor, ignore document hit-testing
-            if (getScaledChildAt(x, y).isPresent()) {
+            if (getChildAt(mouseX, mouseY) != null) {
                 document.setHoveredElement(null);
                 return;
             }
 
-            var docPoint = getDocumentPoint(x, y);
+            var docPoint = this.getDocumentPoint(mouseX, mouseY);
             if (docPoint != null) {
                 var hoveredEl = document.pick(docPoint.x(), docPoint.y());
                 document.setHoveredElement(hoveredEl);
@@ -489,22 +475,22 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public boolean scaledMouseScrolled(double mouseX, double mouseY, double delta) {
-        if (!super.scaledMouseScrolled(mouseX, mouseY, delta)) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (!super.mouseScrolled(mouseX, mouseY, delta)) {
             return scrollbar.mouseScrolled(mouseX, mouseY, delta);
         }
         return true;
     }
 
-    protected final void renderDocumentTooltip(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    protected final void renderDocumentTooltip(RenderContext context, int mouseX, int mouseY, float partialTick) {
         var document = getDocumentWithLayout();
         // Render tooltip
         if (document != null && document.getHoveredElement() != null) {
-            renderTooltip(guiGraphics, mouseX, mouseY);
+            renderTooltip(context, mouseX, mouseY);
         }
     }
 
-    private void renderTooltip(GuiGraphics guiGraphics, int x, int y) {
+    private void renderTooltip(RenderContext context, int x, int y) {
         var docPos = getDocumentPoint(x, y);
         if (docPos == null) {
             return;
@@ -518,24 +504,23 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
             dispatchInteraction(
                     hoveredElement,
                     el -> el.getTooltip(docPos.x(), docPos.y()))
-                    .ifPresent(tooltip -> renderTooltip(guiGraphics, tooltip, x, y));
+                    .ifPresent(tooltip -> renderTooltip(context, tooltip, x, y));
         }
     }
 
-    private void renderTooltip(GuiGraphics guiGraphics, GuideTooltip tooltip, int mouseX, int mouseY) {
-        var minecraft = Minecraft.getInstance();
-        var clientLines = tooltip.getLines();
+    private void renderTooltip(RenderContext context, GuideTooltip tooltip, int mouseX, int mouseY) {
+        var lines = tooltip.getLines();
 
-        if (clientLines.isEmpty()) {
+        if (lines.isEmpty()) {
             return;
         }
 
         int frameWidth = 0;
-        int frameHeight = clientLines.size() == 1 ? -2 : 0;
+        int frameHeight = lines.size() == 1 ? -2 : 0;
 
-        for (var clientTooltipComponent : clientLines) {
-            frameWidth = Math.max(frameWidth, clientTooltipComponent.getWidth(minecraft.font));
-            frameHeight += clientTooltipComponent.getHeight();
+        for (var line : lines) {
+            frameWidth = Math.max(frameWidth, line.getWidth(context));
+            frameHeight += line.getHeight(context);
         }
 
         if (!tooltip.getIcon().isEmpty()) {
@@ -555,42 +540,44 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
 
         int zOffset = 400;
 
-        TooltipRenderUtil.renderTooltipBackground(guiGraphics, x, y, frameWidth, frameHeight, zOffset);
+        TooltipRenderUtil.renderTooltipBackground(x, y, frameWidth, frameHeight, zOffset);
 
         if (!tooltip.getIcon().isEmpty()) {
             x += 18;
         }
 
-        var poseStack = guiGraphics.pose();
-        var bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-        poseStack.pushPose();
-        poseStack.translate(0.0, 0.0, zOffset);
+        context.push();
+        context.translate(0, 0, zOffset);
         int currentY = y;
 
-        // Batch-render tooltip text first
-        for (int i = 0; i < clientLines.size(); ++i) {
-            var line = clientLines.get(i);
-            line.renderText(minecraft.font, x, currentY, poseStack.last().pose(), bufferSource);
-            currentY += line.getHeight() + (i == 0 ? 2 : 0);
+        // Render tooltip text and image first
+        for (int i = 0; i < lines.size(); ++i) {
+            var line = lines.get(i);
+            line.render(context, x, currentY);
+            currentY += line.getHeight(context) + (i == 0 ? 2 : 0);
         }
-
-        bufferSource.endBatch();
 
         // Then render tooltip decorations, items, etc.
-        currentY = y;
         if (!tooltip.getIcon().isEmpty()) {
-            poseStack.pushPose();
-            poseStack.translate(0, 0, zOffset);
-            guiGraphics.renderItem(tooltip.getIcon(), x - 18, y);
-            poseStack.popPose();
-        }
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+            GlStateManager.enableRescaleNormal();
+            RenderHelper.enableGUIStandardItemLighting();
 
-        for (int i = 0; i < clientLines.size(); ++i) {
-            var line = clientLines.get(i);
-            line.renderImage(minecraft.font, x, currentY, guiGraphics);
-            currentY += line.getHeight() + (i == 0 ? 2 : 0);
+            float screenZ = this.zLevel;
+            float itemRenderZ = this.itemRender.zLevel;
+            this.zLevel = zOffset;
+            this.itemRender.zLevel = zOffset;
+
+            this.itemRender.renderItemAndEffectIntoGUI(tooltip.getIcon(), x - 18, y);
+
+            this.itemRender.zLevel = itemRenderZ;
+            this.zLevel = screenZ;
+
+            RenderHelper.disableStandardItemLighting();
+            GlStateManager.disableRescaleNormal();
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
         }
-        poseStack.popPose();
+        context.pop();
     }
 
     @Override
@@ -626,7 +613,7 @@ public abstract class DocumentScreen extends IndepentScaleScreen implements Guid
     }
 
     @Override
-    public void onClose() {
+    protected void onClose() {
         super.onClose();
         releaseMouseCapture();
     }

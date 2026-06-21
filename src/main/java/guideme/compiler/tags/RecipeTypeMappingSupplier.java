@@ -1,12 +1,7 @@
 package guideme.compiler.tags;
 
-import guideme.document.block.LytBlock;
 import guideme.extensions.Extension;
 import guideme.extensions.ExtensionPoint;
-import java.util.function.Function;
-import net.minecraft.world.Container;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeType;
 
 /**
  * Allows mods to register mappings between recipe type and their custom recipe blocks for use in {@code <RecipeFor/>}
@@ -22,8 +17,6 @@ public interface RecipeTypeMappingSupplier extends Extension {
     void collect(RecipeTypeMappings mappings);
 
     interface RecipeTypeMappings {
-        <T extends Recipe<C>, C extends Container> void add(
-                RecipeType<T> recipeType,
-                Function<? super T, LytBlock> factory);
+        <T> void add(RecipeDisplayMapping<T> mapping);
     }
 }

@@ -4,7 +4,7 @@ import guideme.compiler.ParsedGuidePage;
 import guideme.indices.PageIndex;
 import guideme.navigation.NavigationTree;
 import java.util.Collection;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public interface PageCollection {

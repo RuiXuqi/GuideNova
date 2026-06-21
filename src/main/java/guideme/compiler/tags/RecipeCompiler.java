@@ -5,7 +5,6 @@ import guideme.document.block.LytBlock;
 import guideme.document.block.LytBlockContainer;
 import guideme.document.block.LytParagraph;
 import guideme.internal.GuideMEClient;
-import guideme.internal.util.Platform;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.libs.mdast.model.MdAstNode;
 import java.util.ArrayList;
@@ -15,14 +14,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
-import java.util.function.Function;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.Container;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeManager;
-import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.oredict.OreDictionary;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +28,7 @@ public class RecipeCompiler extends BlockTagCompiler {
     private static final Logger LOG = LoggerFactory.getLogger(RecipeCompiler.class);
 
     @Nullable
-    private List<RecipeTypeMapping<?, ?>> sharedMappings;
+    private List<RecipeDisplayMapping<?>> sharedMappings;
 
     @Override
     public Set<String> getTagNames() {
@@ -43,34 +37,25 @@ public class RecipeCompiler extends BlockTagCompiler {
 
     @Override
     protected void compile(PageCompiler compiler, LytBlockContainer parent, MdxJsxElementFields el) {
-        // Find the recipe
-        var recipeManager = Platform.getClientRecipeManager();
-        if (recipeManager == null) {
-            parent.appendError(compiler, "Cannot show recipe while not in-game", el);
+        var fallbackText = el.getAttributeString("fallbackText", null);
+        var mappings = getMappings(compiler, parent, el);
+        if (mappings == null) {
             return;
         }
 
-        var fallbackText = el.getAttributeString("fallbackText", null);
-
         if ("RecipesFor".equals(el.name())) {
-            var itemAndId = MdxAttrs.getRequiredItemAndId(compiler, parent, el, "id");
+            var itemAndId = MdxAttrs.getRequiredItemStackAndId(compiler, parent, el, OreDictionary.WILDCARD_VALUE);
             if (itemAndId == null) {
                 return;
             }
 
             boolean anyAdded = false;
-            var item = itemAndId.getRight();
-            for (var recipe : recipeManager.getRecipes()) {
-                if (Platform.recipeHasResult(recipe, item)) {
-                    for (var mapping : getMappings(compiler)) {
-                        var block = mapping.tryCreate(recipe);
-                        if (block != null) {
-                            block.setSourceNode((MdAstNode) el);
-                            parent.append(block);
-                            anyAdded = true;
-                            break;
-                        }
-                    }
+            var target = itemAndId.getRight();
+            for (var mapping : mappings) {
+                for (var block : createAllForOutput(mapping, target)) {
+                    block.setSourceNode((MdAstNode) el);
+                    parent.append(block);
+                    anyAdded = true;
                 }
             }
 
@@ -78,16 +63,16 @@ public class RecipeCompiler extends BlockTagCompiler {
                 parent.append(LytParagraph.of(fallbackText));
             }
         } else if ("RecipeFor".equals(el.name())) {
-            var itemAndId = MdxAttrs.getRequiredItemAndId(compiler, parent, el, "id");
+            var itemAndId = MdxAttrs.getRequiredItemStackAndId(compiler, parent, el, OreDictionary.WILDCARD_VALUE);
             if (itemAndId == null) {
                 return;
             }
 
             var id = itemAndId.getLeft();
-            var item = itemAndId.getRight();
+            var target = itemAndId.getRight();
 
-            for (var mapping : getMappings(compiler)) {
-                var block = mapping.tryCreate(recipeManager, item);
+            for (var mapping : mappings) {
+                var block = mapping.createFirstForOutput(target);
                 if (block != null) {
                     block.setSourceNode((MdAstNode) el);
                     parent.append(block);
@@ -96,7 +81,7 @@ public class RecipeCompiler extends BlockTagCompiler {
             }
 
             if (fallbackText == null) {
-                if (!GuideMEClient.instance().isHideMissingRecipeErrors()) {
+                if (!GuideMEClient.isHideMissingRecipeErrors()) {
                     parent.appendError(compiler, "Couldn't find recipe for " + id, el);
                 }
             } else if (!fallbackText.isEmpty()) {
@@ -108,18 +93,10 @@ public class RecipeCompiler extends BlockTagCompiler {
                 return;
             }
 
-            var recipe = recipeManager.byKey(recipeId).orElse(null);
-            if (recipe == null) {
-                if (fallbackText == null) {
-                    parent.appendError(compiler, "Couldn't find recipe " + recipeId, el);
-                } else if (!fallbackText.isEmpty()) {
-                    parent.append(LytParagraph.of(fallbackText));
-                }
-                return;
-            }
-
-            for (var mapping : getMappings(compiler)) {
-                var block = mapping.tryCreate(recipe);
+            boolean foundType = false;
+            for (var mapping : mappings) {
+                foundType = true;
+                var block = mapping.createById(recipeId);
                 if (block != null) {
                     block.setSourceNode((MdAstNode) el);
                     parent.append(block);
@@ -128,8 +105,11 @@ public class RecipeCompiler extends BlockTagCompiler {
             }
 
             if (fallbackText == null) {
-                if (!GuideMEClient.instance().isHideMissingRecipeErrors()) {
-                    parent.appendError(compiler, "Couldn't find a handler for recipe " + recipeId, el);
+                if (!GuideMEClient.isHideMissingRecipeErrors()) {
+                    var message = foundType
+                            ? "Couldn't find recipe " + recipeId
+                            : "Couldn't find recipe type " + MdxAttrs.getString(compiler, parent, el, "type", null);
+                    parent.appendError(compiler, message, el);
                 }
             } else if (!fallbackText.isEmpty()) {
                 parent.append(LytParagraph.of(fallbackText));
@@ -137,57 +117,15 @@ public class RecipeCompiler extends BlockTagCompiler {
         }
     }
 
-    /**
-     * Maps a recipe type to a factory that can create a layout block to display it.
-     */
-    private record RecipeTypeMapping<T extends Recipe<C>, C extends Container>(
-            RecipeType<T> recipeType,
-            Function<? super T, LytBlock> factory) {
-        @SuppressWarnings("unchecked")
-        @Nullable
-        LytBlock tryCreate(RecipeManager recipeManager, Item resultItem) {
-            var registryAccess = Platform.getClientRegistryAccess();
-
-            // We try to find non-special recipes first then fall back to special
-            List<Recipe<C>> fallbackCandidates = new ArrayList<>();
-            for (var recipe : recipeManager.byType(recipeType).values()) {
-                if (recipe.isSpecial()) {
-                    fallbackCandidates.add(recipe);
-                    continue;
-                }
-
-                if (Platform.recipeHasResult(recipe, resultItem)) {
-                    return factory.apply(recipe);
-                }
-            }
-
-            for (var recipe : fallbackCandidates) {
-                if (Platform.recipeHasResult(recipe, resultItem)) {
-                    return factory.apply((T) recipe);
-                }
-            }
-
-            return null;
-        }
-
-        @SuppressWarnings("unchecked")
-        @Nullable
-        LytBlock tryCreate(Recipe<?> recipe) {
-            if (recipeType == recipe.getType()) {
-                return factory.apply((T) recipe);
-            }
-
-            return null;
-        }
-    }
-
-    private Iterable<RecipeTypeMapping<?, ?>> getMappings(PageCompiler compiler) {
-        List<RecipeTypeMapping<?, ?>> result = new ArrayList<>();
+    @Nullable
+    private List<RecipeDisplayMapping<?>> getMappings(PageCompiler compiler, LytBlockContainer parent,
+            MdxJsxElementFields el) {
+        List<RecipeDisplayMapping<?>> result = new ArrayList<>();
         var mappings = new RecipeTypeMappingSupplier.RecipeTypeMappings() {
             @Override
-            public <T extends Recipe<C>, C extends Container> void add(RecipeType<T> recipeType,
-                    Function<? super T, LytBlock> factory) {
-                result.add(new RecipeTypeMapping<>(recipeType, factory));
+            public <T> void add(RecipeDisplayMapping<T> mapping) {
+                Objects.requireNonNull(mapping, "mapping");
+                result.add(mapping);
             }
         };
         for (var extension : compiler.getExtensions(RecipeTypeMappingSupplier.EXTENSION_POINT)) {
@@ -196,25 +134,35 @@ public class RecipeCompiler extends BlockTagCompiler {
 
         result.addAll(getSharedMappings());
 
+        var requestedType = MdxAttrs.getString(compiler, parent, el, "type", null);
+        if (requestedType != null) {
+            ResourceLocation resolvedType;
+            try {
+                resolvedType = compiler.resolveId(requestedType.trim());
+            } catch (Exception e) {
+                parent.appendError(compiler, "Malformed recipe type " + requestedType + ": " + e.getMessage(), el);
+                return null;
+            }
+            result.removeIf(mapping -> !resolvedType.equals(mapping.id()));
+        }
+
         return result;
     }
 
-    private List<? extends RecipeTypeMapping<?, ?>> getSharedMappings() {
+    private List<? extends RecipeDisplayMapping<?>> getSharedMappings() {
         if (sharedMappings != null) {
             return sharedMappings;
         }
 
         Set<ResourceLocation> recipeTypes = new HashSet<>();
-        List<RecipeTypeMapping<?, ?>> result = new ArrayList<>();
+        List<RecipeDisplayMapping<?>> result = new ArrayList<>();
         var mappings = new RecipeTypeMappingSupplier.RecipeTypeMappings() {
             @Override
-            public <T extends Recipe<C>, C extends Container> void add(RecipeType<T> recipeType,
-                    Function<? super T, LytBlock> factory) {
-                Objects.requireNonNull(recipeType, "recipeType");
-                Objects.requireNonNull(factory, "factory");
+            public <T> void add(RecipeDisplayMapping<T> mapping) {
+                Objects.requireNonNull(mapping, "mapping");
 
-                recipeTypes.add(BuiltInRegistries.RECIPE_TYPE.getKey(recipeType));
-                result.add(new RecipeTypeMapping<>(recipeType, factory));
+                recipeTypes.add(mapping.id());
+                result.add(mapping);
             }
         };
 
@@ -233,5 +181,15 @@ public class RecipeCompiler extends BlockTagCompiler {
         LOG.info("Discovered shared recipe type mappings: {}", recipeTypesSorted);
 
         return sharedMappings = List.copyOf(result);
+    }
+
+    private static <T> List<LytBlock> createAllForOutput(RecipeDisplayMapping<T> mapping, ItemStack target) {
+        var result = new ArrayList<LytBlock>();
+        for (T recipe : mapping.recipes()) {
+            if (mapping.outputMatches(recipe, target)) {
+                result.add(mapping.create(recipe));
+            }
+        }
+        return result;
     }
 }

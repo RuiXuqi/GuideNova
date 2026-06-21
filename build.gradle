@@ -1,396 +1,266 @@
-buildscript {
-    dependencies {
-        classpath 'com.guardsquare:proguard-gradle:7.5.0'
+// It is advised to not edit this file directly, in order to update script easily.
+// Instead, edit gradle/scripts/extra.gradle to customize the build.
+import org.jetbrains.gradle.ext.Gradle
+
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.jetbrains.gradle.plugin.idea-ext' version '1.4.1'
+    id 'xyz.wagyourtail.unimined' version '1.4.25-kappa'
+    id 'net.kyori.blossom' version '2.2.0'
+    id 'com.gradleup.shadow' version '9.4.2' apply false
+}
+
+apply from: 'gradle/scripts/helpers.gradle'
+
+if (propertyBool('enable_shadow')) {
+    apply plugin: 'com.gradleup.shadow'
+}
+
+// Early Assertions
+assertProperty 'root_package'
+assertProperty 'mod_id'
+assertProperty 'mod_package'
+assertProperty 'mod_name'
+
+assertSubProperties 'use_access_transformer', 'access_transformer_locations'
+assertSubProperties 'is_coremod', 'coremod_includes_mod', 'coremod_plugin_class_name'
+
+setDefaultProperty 'generate_sources_jar', true, false
+setDefaultProperty 'generate_javadocs_jar', true, false
+setDefaultProperty 'enable_shadow', false, false
+setDefaultProperty 'minecraft_username', true, 'Dev'
+setDefaultProperty 'extra_jvm_args', false, ''
+
+group = propertyString('root_package')
+
+base {
+    archivesName = propertyString('mod_id')
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    if (propertyBool('generate_sources_jar')) {
+        withSourcesJar()
+    }
+    if (propertyBool('generate_javadocs_jar')) {
+        withJavadocJar()
     }
 }
 
-plugins {
-    id 'net.neoforged.moddev.legacyforge'
-    id 'maven-publish'
-    id 'com.gradleup.shadow'
-    id 'signing'
+configurations {
+    contain
+    implementation.extendsFrom(contain)
+    modCompileOnly
+    compileOnly.extendsFrom(modCompileOnly)
+    modRuntimeOnly
+    runtimeOnly.extendsFrom(modRuntimeOnly)
+    if (propertyBool('enable_shadow')) {
+        shaded
+        implementation.extendsFrom(shaded)
+    }
 }
 
-apply plugin: ProjectDefaultsPlugin
-apply plugin: FlatBuffersPlugin
+String remapTaskName = propertyBool('enable_shadow') ? "remapShadowJar" : "remapJar"
 
-evaluationDependsOn ":markdown"
+//noinspection GroovyAssignabilityCheck
+unimined.minecraft {
+    version "1.12.2"
 
-group = "org.appliedenergistics"
-base {
-    archivesName = "guideme"
+    mappings {
+        mcp("stable", "39-1.12")
+    }
+
+    cleanroom {
+        if (propertyBool('use_access_transformer')) {
+            accessTransformer "${rootProject.projectDir}/src/main/resources/${propertyString('access_transformer_locations')}"
+        }
+        loader "0.5.15-alpha"
+        runs.all {
+            systemProperty("crl.dev.mixin", "${mod_id}.default.mixins.json,${mod_id}.optional.mixins.json")
+            args += ['--username', minecraft_username]
+            def extraArgs = propertyString('extra_jvm_args')
+            if (extraArgs != null && !extraArgs.trim().isEmpty()) {
+                jvmArgs += extraArgs.split { "\\s+" }.toList()
+            }
+            if (propertyBool('enable_foundation_debug')) {
+                systemProperty("foundation.dump", "true")
+                systemProperty("foundation.verbose", "true")
+            }
+            if (propertyBool('is_coremod')) {
+                systemProperty("fml.coreMods.load", propertyString('coremod_plugin_class_name'))
+            }
+            return
+        }
+    }
+
+    defaultRemapJar = false
+
+    if (sourceSet == sourceSets.main) {
+        String jarTaskName = propertyBool('enable_shadow') ? "shadowJar" : "jar"
+
+        remap(tasks.named(jarTaskName).get()) {
+            mixinRemap {
+                enableBaseMixin()
+                enableMixinExtra()
+            }
+        }
+    }
+
+    mods {
+        remap(configurations.modCompileOnly)
+        remap(configurations.modRuntimeOnly)
+    }
+}
+
+apply from: 'gradle/scripts/dependencies.gradle'
+
+processResources {
+    rename '(.+_at.cfg)', 'META-INF/$1'
 }
 
 sourceSets {
     main {
-        resources {
-            srcDir 'src/generated/resources'
+        blossom {
+            javaSources {
+                property('mod_id', propertyString('mod_id'))
+                property('mod_name', propertyString('mod_name'))
+                property('mod_version', propertyString('mod_version'))
+                property('package', "${mod_package}.internal")
+            }
+            resources {
+                property('mod_id', propertyString('mod_id'))
+                property('mod_name', propertyString('mod_name'))
+                property('mod_version', propertyString('mod_version'))
+                property('mod_description', propertyString('mod_description'))
+                property('mod_authors', propertyStringList('mod_authors', ',').collect {it.strip()}.join('", "'))
+                property('mod_credits', propertyString('mod_credits'))
+                property('mod_license', propertyString('mod_license'))
+                property('mod_url', propertyString('mod_url'))
+                property('mod_issue_tracker_url', propertyString('mod_issue_tracker_url'))
+                property('mod_update_json', propertyString('mod_update_json'))
+                property('mod_icon_item', propertyString('mod_icon_item'))
+                property('mod_logo_path', propertyString('mod_logo_path'))
+                property('mod_icon_path', propertyString('mod_icon_path'))
+                property('mod_background_path', propertyString('mod_background_path'))
+            }
         }
     }
-    testmod
-}
-
-configurations {
-    localImplementation
-    shaded {
-        transitive = false
-    }
-    // Dependencies only used for the guide export, but not shipped
-    guideExportOnly
-    configurations.compileClasspath.extendsFrom(guideExportOnly)
-    configurations.runtimeClasspath.extendsFrom(guideExportOnly)
-
-    compileClasspath.extendsFrom localImplementation
-    runtimeClasspath.extendsFrom localImplementation
-    testCompileClasspath.extendsFrom localImplementation
-    testRuntimeClasspath.extendsFrom localImplementation
-}
-
-// All jar files from this folder will be added automatically as runtime mod dependencies
-def extraModsDir = "extra-mods-${minecraft_version}"
-file(extraModsDir).mkdir()
-
-repositories {
-    mavenCentral()
-    flatDir {
-        name = "extra-mods"
-        dir file(extraModsDir)
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
     }
 }
 
-// We're actually launching into testmod, not the main source set
-obfuscation.createRemappingConfiguration(configurations.testmodRuntimeOnly)
-
-dependencies {
-    compileOnly "org.jetbrains:annotations:24.1.0"
-
-    // To be copied into the jar file
-    shaded project(path: ':markdown', configuration: "archives")
-    shaded "io.methvin:directory-watcher:${directory_watcher_version}"
-    shaded "org.yaml:snakeyaml:${snakeyaml_version}"
-    shaded "com.google.flatbuffers:flatbuffers-java:${flatbuffers_version}"
-
-    api(project(':markdown')) {
-        transitive = false
-    }
-    // Do not inherit any transitive dependencies here since we rely on those transitive dependencies being
-    // present in Minecrafts own dependencies already.
-    localImplementation("io.methvin:directory-watcher:${directory_watcher_version}") {
-        transitive = false
-    }
-    localImplementation("org.yaml:snakeyaml:${snakeyaml_version}") {
-        transitive = false
-    }
-    localImplementation("com.google.flatbuffers:flatbuffers-java:${flatbuffers_version}") {
-        transitive = false
-    }
-    shaded(localImplementation("org.apache.lucene:lucene-core:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-analysis-common:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-queryparser:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-facet:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-queries:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-highlighter:${lucene_version}"))
-    shaded(localImplementation("org.apache.lucene:lucene-memory:${lucene_version}"))
-
-    // Used for the guide export
-    guideExportOnly("org.bytedeco:ffmpeg-platform:${ffmpeg_version}")
-
-    // unit test dependencies
-    testImplementation(platform("org.junit:junit-bom:${junit_version}"))
-    testImplementation(platform("org.assertj:assertj-bom:${assertj_version}"))
-    testImplementation("org.junit.jupiter:junit-jupiter-api")
-    testImplementation("org.junit.jupiter:junit-jupiter-params")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
-    testImplementation("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.assertj:assertj-core")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.12.0")
-
-    testmodRuntimeOnly sourceSets.main.output
-
-    // Locally sourced extra mods for runtime (i.e. testing)
-    for (extraModJar in fileTree(dir: extraModsDir, include: '*.jar')) {
-        def basename = extraModJar.name.substring(0, extraModJar.name.length() - ".jar".length())
-        def versionSep = basename.lastIndexOf('-')
-        assert versionSep != -1
-        def artifactId = basename.substring(0, versionSep)
-        def version = basename.substring(versionSep + 1)
-        logger.lifecycle("Adding extra mod {}", extraModJar)
-        modTestmodRuntimeOnly "extra-mods:$artifactId:$version"
-    }
+compileJava {
+    sourceCompatibility = targetCompatibility = JavaVersion.VERSION_25
 }
 
-///////////////////
-// Version Number
-ext.tag = System.getenv('TAG') ?: ""
-if (ext.tag) {
-    if (!ext.tag.startsWith("v")) {
-        throw new GradleException("Tags should start with v ${ext.tag}")
-    }
-
-    project.version = ext.tag.substring("v".length())
-} else {
-    // This essentially tries to implement delay expansion of the project version based on a value source to
-    // still support configuration caching.
-    project.version = providers.gradleProperty("version").orElse("").flatMap(version -> {
-        if (!version.isBlank()) {
-            return providers.provider { version }
+jar {
+    archiveClassifier = 'dev'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    if (configurations.contain.size() > 0) {
+        into('/') {
+            from configurations.contain
         }
-        return providers.of(ProjectVersionSource.class, spec -> {
-            spec.getParameters().getDefaultBranches().addAll("main", project.minecraft_version)
-        });
-    }).get()
+    }
+    doFirst {
+        manifest {
+            def attribute_map = [:]
+            attribute_map['ModType'] = "CRL"
+            attribute_map['MixinConfigs'] = "${mod_id}.default.mixins.json,${mod_id}.optional.mixins.json"
+            if (configurations.contain.size() > 0) {
+                attribute_map['ContainedDeps'] = configurations.contain.collect { it.name }.join(' ')
+                attribute_map['NonModDeps'] = true
+            }
+            if (propertyBool('is_coremod')) {
+                attribute_map['FMLCorePlugin'] = propertyString('coremod_plugin_class_name')
+                if (propertyBool('coremod_includes_mod')) {
+                    attribute_map['FMLCorePluginContainsFMLMod'] = true
+                }
+            }
+            if (propertyBool('use_access_transformer')) {
+                attribute_map['FMLAT'] = propertyString('access_transformer_locations')
+            }
+            attributes(attribute_map)
+        }
+    }
+    finalizedBy(tasks.named(remapTaskName).get())
 }
 
-tasks.register("printProjectVersion", PrintProjectVersion.class);
+if (propertyBool('enable_shadow')) {
+    // Shade deps to the dev jar, so the normal dev jar will contain deps
+    shadowJar {
+        archiveClassifier = 'dev'
+        //noinspection GroovyAssignabilityCheck,GroovyAccessibility
+        configurations = [ project.configurations.shaded ]
+    }
+    // Unshaded dev jar get 'plain' as name
+    tasks.named("jar").configure {
+        finalizedBy shadowJar
+        archiveClassifier = "plain"
+    }
+}
 
-final testModGuidePath = file('src/testmod/resources/assets/testmod/guides/testmod/guide').absolutePath
+tasks.named(remapTaskName).configure {
+    doFirst {
+        logging.captureStandardOutput LogLevel.INFO
+    }
+    doLast {
+        logging.captureStandardOutput LogLevel.QUIET
+    }
+}
+
+idea {
+    module {
+        inheritOutputDirs = true
+    }
+    project {
+        settings {
+            runConfigurations {
+                "0. Gen Sources"(Gradle) {
+                    taskNames = ["genSources"]
+                }
+                "1. Run Client"(Gradle) {
+                    taskNames = ["testmodRunClient"]
+                }
+                "2. Run Server"(Gradle) {
+                    taskNames = ["testmodRunServer"]
+                }
+                "3. Build Mod"(Gradle) {
+                    taskNames = ["build"]
+                }
+            }
+            compiler.javac {
+                afterEvaluate {
+                    javacAdditionalOptions = "-encoding utf8"
+                    moduleJavacAdditionalOptions = [
+                            (project.name + ".main"): tasks.compileJava.options.compilerArgs.collect { '"' + it + '"' }.join(' ')
+                    ]
+                }
+            }
+        }
+    }
+}
+
+compileTestJava {
+    sourceCompatibility = targetCompatibility = JavaVersion.VERSION_25
+}
 
 test {
     useJUnitPlatform()
-
-    systemProperty 'guideme.testmod.guide.sources', testModGuidePath
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    })
+    workingDir = rootProject.file('run')
 }
 
-legacyForge {
-    enable {
-        forgeVersion = project.forge_version
-        enabledSourceSets = [sourceSets.main, sourceSets.testmod, sourceSets.test]
-    }
-
-    // can't do that in 1.20.1 since Forges own ATs are broken
-    // validateAccessTransformers = true
-
-    mods {
-        guideme {
-            sourceSet sourceSets.main
-        }
-        testmod {
-            sourceSet sourceSets.testmod
-        }
-        guidemetest {
-            sourceSet sourceSets.main
-            sourceSet sourceSets.test
-        }
-    }
-
-    runs {
-        configureEach {
-            gameDirectory = project.file('run')
-
-            loadedMods = [mods.guideme, mods.testmod]
-            sourceSet = sourceSets.testmod
-
-            additionalRuntimeClasspathConfiguration.extendsFrom configurations.shaded
-            additionalRuntimeClasspathConfiguration.extendsFrom configurations.guideExportOnly
-
-            systemProperty("guideme.testmod.guide.sources", testModGuidePath)
-        }
-        client {
-            client()
-        }
-        server {
-            server()
-        }
-        gametestWorld {
-            client()
-            programArguments = [
-                    "--username", "GuideMEDev", "--quickPlaySingleplayer", "GametestWorld"
-            ]
-        }
-        guide {
-            client()
-            systemProperty('guideme.showOnStartup', 'testmod:guide')
-        }
-        data {
-            data()
-            programArguments = [
-                    '--mod', 'guideme',
-                    '--all',
-                    '--output', file('src/generated/resources/').absolutePath,
-                    '--existing', file('src/main/resources').absolutePath
-            ]
-        }
-    }
-}
-
-final generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
-    group = 'build'
-    from('src/main/mods.toml') {
-        rename '(.*)', 'META-INF/$1'
-    }
-    into 'build/generated/modMetadata'
-
-    // Exposed project properties
-    Map<String, String> projectProperties = [
-            'version',
-            'forge_version_range',
-            'minecraft_version_range'
-    ].collectEntries { [it, project[it]] }
-
-    // Ensure the resources get re-evaluate when the version changes
-    inputs.properties projectProperties
-    expand projectProperties
-}
-sourceSets.main.resources.srcDir generateModMetadata
-legacyForge.ideSyncTask generateModMetadata
-
-jar {
-    finalizedBy shadowJar
-    archiveClassifier = "plain"
-}
-
-shadowJar {
-    from sourceSets.main.output.classesDirs
-    from sourceSets.main.output.resourcesDir
-
-    dependencies {
-        exclude 'META-INF/maven/**'
-    }
-    mergeServiceFiles()
-
-    relocate "io.methvin", "guideme.internal.shaded.methvin"
-    relocate "org.yaml.snakeyaml", "guideme.internal.shaded.snakeyaml"
-    relocate "com.google.flatbuffers", "guideme.internal.shaded.flatbuffers"
-    relocate "org.apache.lucene", "guideme.internal.shaded.lucene"
-    relocate "org.tartarus.snowball", "guideme.internal.shaded.snowball"
-
-    configurations = [project.configurations.shaded]
-    archiveClassifier = 'dev'
-}
-
-obfuscation {
-    reobfuscate(tasks.named("shadowJar"), sourceSets.main) {
-        archiveClassifier = ""
-    }
-}
-reobfJar.enabled = false
-
-tasks.assemble.dependsOn reobfShadowJar
-
-File proguardFile = file("build/libs/${jar.archiveBaseName.get()}-proguard-${version}.jar")
-
-final proguardConfig = tasks.register('generateProguardConfig', GenerateProGuardConfig) {
-    template = file('proguard.conf')
-    sourceDir = layout.projectDirectory.dir('src/main/java')
-    output = layout.buildDirectory.file('generated/proguard.conf')
-}
-
-final proguardJar = tasks.register('proguardJar', proguard.gradle.ProGuardTask) {
-    dependsOn shadowJar
-    outputs.upToDateWhen { false }
-
-    if (JavaLanguageVersion.current().asInt() <= 8) {
-        libraryjars "${System.getProperty('java.home')}/lib/rt.jar"
-    } else {
-        libraryjars "${System.getProperty('java.home')}/jmods"
-    }
-    libraryjars(configurations.compileClasspath)
-
-    injars(reobfShadowJar.archiveFile)
-    outjars proguardFile
-    configuration proguardConfig
-}
-assemble.dependsOn proguardJar
-
-def publicApiIncludePatterns = {
-    exclude "**/*Internal.*"
-    exclude "**/*Internal\$*.*"
-    exclude "**/internal/**"
-}
-
-javadoc {
-    source = sourceSets.main.allJava
-    classpath = sourceSets.main.compileClasspath + sourceSets.main.output
-
-    options.addStringOption('Xdoclint:none', '-quiet')
+tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.charSet = 'UTF-8'
-}
-javadoc publicApiIncludePatterns
-
-tasks.register('javadocJar', Jar) {
-    dependsOn javadoc
-    archiveClassifier = "javadoc"
-    from javadoc.destinationDir
 }
 
-tasks.register('sourcesJar', Jar) {
-    archiveClassifier = "sources"
-    from sourceSets.main.allJava
-}
-
-tasks.register('apiJar', Jar) {
-    archiveClassifier = "api"
-    // api jar ist just a development aid and serves as both a binary and source jar simultaneously
-    from sourceSets.main.output
-    from sourceSets.main.allJava
-    from project(":markdown").sourceSets.main.output
-    include "**/*.class"
-}
-apiJar publicApiIncludePatterns
-
-artifacts {
-    archives javadocJar
-    archives sourcesJar
-    archives apiJar
-}
-
-//////////////////
-// Maven publish
-publishing {
-    publications {
-        maven(MavenPublication) {
-            artifactId = "guideme"
-            version = project.version
-            pom {
-                name = "GuideME"
-                description = "GuideME offers the foundation for your Minecraft guidebook needs, be it for mods or modpacks."
-                url = "https://guideme.appliedenergistics.org"
-                scm {
-                    connection = "scm:git:git://github.com/AppliedEnergistics/GuideME.git"
-                    developerConnection = "scm:git:ssh://github.com:AppliedEnergistics/GuideME.git"
-                    url = "https://github.com/AppliedEnergistics/GuideME/tree/main"
-                }
-                licenses {
-                    license {
-                        name = "LGPLv3, MIT, and Apache License v2"
-                        url = "https://guideme.appliedenergistics.org/license"
-                    }
-                }
-                developers {
-                    developer {
-                        name = "shartte"
-                        email = "team@appliedenergistics.org"
-                        organization = "Applied Energistics"
-                        organizationUrl = "https://github.com/AppliedEnergistics/"
-                    }
-                }
-            }
-
-            artifact(proguardFile) {
-                builtBy(proguardJar)
-            }
-            artifact sourcesJar
-            artifact javadocJar
-            artifact apiJar
-        }
-    }
-    repositories {
-        maven {
-            name = "Local"
-            url = file("build/repo").toURI()
-        }
-    }
-}
-
-signing {
-    def signingKey = findProperty("signingKey")
-    def signingPassword = findProperty("signingPassword")
-    required = signingKey != null && signingPassword != null
-    useInMemoryPgpKeys(signingKey, signingPassword)
-    sign publishing.publications.maven
-}
-
-afterEvaluate {
-    println('Version: ' + project.version)
-}
+apply from: 'gradle/scripts/publishing.gradle'
+apply from: 'gradle/scripts/extra.gradle'

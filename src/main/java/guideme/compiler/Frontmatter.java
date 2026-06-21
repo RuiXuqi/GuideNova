@@ -1,10 +1,10 @@
 package guideme.compiler;
 
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import java.util.Map;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.nbt.JsonToNBT;
+import net.minecraft.nbt.NBTException;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -34,7 +34,7 @@ public record Frontmatter(
                 position = getInt(navigationMap, "position");
             }
             var iconIdStr = getString(navigationMap, "icon");
-            CompoundTag iconNbt = getCompound(navigationMap, "icon_nbt");
+            NBTTagCompound iconNbt = getCompound(navigationMap, "icon_nbt");
 
             ResourceLocation parentId = null;
             if (parentIdStr != null) {
@@ -75,7 +75,7 @@ public record Frontmatter(
     }
 
     @Nullable
-    private static CompoundTag getCompound(Map<?, ?> map, String key) {
+    private static NBTTagCompound getCompound(Map<?, ?> map, String key) {
         var value = map.get(key);
         if (value == null) {
             return null;
@@ -84,8 +84,8 @@ public record Frontmatter(
             throw new IllegalArgumentException("Key " + key + " has to be a string (SNBT format)!");
         }
         try {
-            return TagParser.parseTag(string);
-        } catch (CommandSyntaxException e) {
+            return JsonToNBT.getTagFromJson(string);
+        } catch (NBTException e) {
             throw new IllegalArgumentException("Key " + key + " is not a valid SNBT string: " + string, e);
         }
     }

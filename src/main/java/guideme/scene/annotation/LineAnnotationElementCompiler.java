@@ -7,7 +7,7 @@ import guideme.document.LytErrorSink;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.scene.GuidebookScene;
 import java.util.Set;
-import net.minecraft.core.BlockPos;
+import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
@@ -18,12 +18,6 @@ public class LineAnnotationElementCompiler extends AnnotationTagCompiler {
     @Override
     public Set<String> getTagNames() {
         return Set.of("LineAnnotation");
-    }
-
-    @Override
-    protected @Nullable SceneAnnotation createAnnotation(PageCompiler compiler, LytErrorSink errorSink,
-            MdxJsxElementFields el) {
-        return createAnnotation(null, compiler, errorSink, el, BlockPos.ZERO);
     }
 
     @Override

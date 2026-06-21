@@ -3,6 +3,7 @@ package guideme.internal;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import guideme.GuidePageChange;
+import guideme.compiler.IdUtils;
 import guideme.compiler.PageCompiler;
 import guideme.compiler.ParsedGuidePage;
 import guideme.internal.util.LangUtil;
@@ -24,8 +25,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.ModList;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.Loader;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +65,7 @@ class GuideSourceWatcher implements AutoCloseable {
         // The namespace does not necessarily *need* to be a mod id, but if it is, the source pack needs to
         // follow the specific mod-id format. Otherwise we assume it's a resource pack where namespace == pack id,
         // which is also not 100% correct.
-        this.sourcePackId = ModList.get().isLoaded(namespace) ? "mod:" + namespace : namespace;
+        this.sourcePackId = Loader.isModLoaded(namespace) ? "mod:" + namespace : namespace;
         this.defaultLanguage = defaultLanguage;
         this.sourceFolder = sourceFolder;
         if (!Files.isDirectory(sourceFolder)) {
@@ -294,10 +295,10 @@ class GuideSourceWatcher implements AutoCloseable {
         if (!relativePathStr.endsWith(".md")) {
             return null;
         }
-        if (!ResourceLocation.isValidPath(relativePathStr)) {
+        if (!IdUtils.isValidPath(relativePathStr)) {
             return null;
         }
-        return new ResourceLocation(namespace, relativePathStr);
+        return IdUtils.build(namespace, relativePathStr);
     }
 
     @Nullable

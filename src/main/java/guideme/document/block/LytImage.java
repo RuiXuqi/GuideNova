@@ -8,10 +8,8 @@ import guideme.layout.LayoutContext;
 import guideme.render.GuidePageTexture;
 import guideme.render.RenderContext;
 import java.util.Optional;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.texture.TextureUtil;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public class LytImage extends LytBlock implements InteractiveElement {
@@ -77,13 +75,9 @@ public class LytImage extends LytBlock implements InteractiveElement {
     }
 
     @Override
-    public void renderBatch(RenderContext context, MultiBufferSource buffers) {
-    }
-
-    @Override
     public void render(RenderContext context) {
         if (texture == null) {
-            var texture = MissingTextureAtlasSprite.getTexture();
+            var texture = TextureUtil.MISSING_TEXTURE;
             context.fillTexturedRect(getBounds(), texture);
         } else {
             context.fillTexturedRect(getBounds(), texture);
@@ -93,7 +87,7 @@ public class LytImage extends LytBlock implements InteractiveElement {
     @Override
     public Optional<GuideTooltip> getTooltip(float x, float y) {
         if (title != null) {
-            return Optional.of(new TextTooltip(Component.literal(title)));
+            return Optional.of(new TextTooltip(title));
         }
         return Optional.empty();
     }

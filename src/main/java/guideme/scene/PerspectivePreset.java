@@ -1,11 +1,11 @@
 package guideme.scene;
 
-import net.minecraft.util.StringRepresentable;
+import net.minecraft.util.IStringSerializable;
 
 /**
  * Camera pre-sets to easily change the orientation of a scene.
  */
-public enum PerspectivePreset implements StringRepresentable {
+public enum PerspectivePreset implements IStringSerializable {
     /**
      * An isometric camera where the northeast corner of blocks faces forward.
      */
@@ -26,7 +26,7 @@ public enum PerspectivePreset implements StringRepresentable {
     }
 
     @Override
-    public String getSerializedName() {
+    public String getName() {
         return serializedName;
     }
 }

@@ -9,7 +9,6 @@ import guideme.document.block.LytHBox;
 import guideme.document.block.LytParagraph;
 import guideme.document.block.LytSlotGrid;
 import guideme.document.block.LytVBox;
-import guideme.internal.util.Platform;
 import guideme.render.GuiAssets;
 import guideme.render.RenderContext;
 import guideme.scene.LytItemImage;
@@ -17,10 +16,11 @@ import guideme.siteexport.ExportableResourceProvider;
 import guideme.siteexport.ResourceExporter;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.level.ItemLike;
+import net.minecraft.block.Block;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.item.crafting.Ingredient;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +35,7 @@ import org.jetbrains.annotations.Nullable;
  * <p/>
  * Use the {@link #builder()} method to get started.
  */
-public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implements ExportableResourceProvider {
+public class LytStandardRecipeBox<T> extends LytVBox implements ExportableResourceProvider {
     private final T holder;
 
     @ApiStatus.Internal
@@ -55,7 +55,9 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
 
     @Override
     public void exportResources(ResourceExporter exporter) {
-        exporter.referenceRecipe(this.holder);
+        if (this.holder instanceof IRecipe recipe) {
+            exporter.referenceRecipe(recipe);
+        }
     }
 
     public static Builder builder() {
@@ -80,7 +82,7 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
             this.title.setStyle(DefaultStyles.CRAFTING_RECIPE_TYPE);
         }
 
-        public <T extends Recipe<?>> LytStandardRecipeBox<T> build(T recipe) {
+        public <T> LytStandardRecipeBox<T> build(T recipe) {
             var box = new LytStandardRecipeBox<>(recipe);
             build(box);
             return box;
@@ -91,8 +93,12 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
             return this;
         }
 
-        public Builder icon(ItemLike workbench) {
-            return icon(workbench.asItem().getDefaultInstance());
+        public Builder icon(Block block) {
+            return icon(new ItemStack(block));
+        }
+
+        public Builder icon(Item item) {
+            return icon(item.getDefaultInstance());
         }
 
         public Builder icon(ItemStack workbench) {
@@ -109,7 +115,7 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
         }
 
         public Builder input(Ingredient ingredient) {
-            this.input = LytSlotGrid.row(List.of(ingredient), false);
+            this.input = LytSlotGrid.rowFromIngredients(List.of(ingredient), false);
             return this;
         }
 
@@ -129,8 +135,8 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
             return this;
         }
 
-        public Builder outputFromResultOf(Recipe<?> recipe) {
-            var resultItem = recipe.getResultItem(Platform.getClientRegistryAccess());
+        public Builder outputFromResultOf(IRecipe recipe) {
+            var resultItem = recipe.getRecipeOutput();
             if (!resultItem.isEmpty()) {
                 output(resultItem);
             }
@@ -179,7 +185,7 @@ public class LytStandardRecipeBox<T extends Recipe<?>> extends LytVBox implement
         }
 
         @ApiStatus.Internal
-        <T extends Recipe<?>> void build(LytStandardRecipeBox<T> box) {
+        void build(LytStandardRecipeBox<?> box) {
             if (this.customBody != null) {
                 if (!this.leftDecoration.isEmpty()) {
                     throw new IllegalStateException("Cannot combine a custom recipe body with left decorations");

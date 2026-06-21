@@ -1,54 +1,63 @@
 package guideme.internal.item;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
 import guideme.internal.GuideRegistry;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.block.model.ItemOverrides;
+import net.minecraft.client.renderer.block.model.IBakedModel;
+import net.minecraft.client.renderer.block.model.ItemOverrideList;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.client.resources.model.Material;
-import net.minecraft.client.resources.model.ModelBaker;
-import net.minecraft.client.resources.model.ModelState;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.client.model.geometry.IGeometryBakingContext;
-import net.minecraftforge.client.model.geometry.IUnbakedGeometry;
+import net.minecraft.client.renderer.vertex.VertexFormat;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.World;
+import net.minecraftforge.client.model.IModel;
+import net.minecraftforge.client.model.ModelLoaderRegistry;
+import net.minecraftforge.common.model.IModelState;
 import org.jetbrains.annotations.Nullable;
 
-public class GuideItemDispatchUnbakedModel implements IUnbakedGeometry<GuideItemDispatchUnbakedModel> {
+@SuppressWarnings("NullableProblems")
+public class GuideItemDispatchUnbakedModel implements IModel {
+    private final Set<ResourceLocation> dependencies;
+
+    public GuideItemDispatchUnbakedModel(Set<ResourceLocation> dependencies) {
+        this.dependencies = dependencies;
+    }
 
     @Override
-    public BakedModel bake(IGeometryBakingContext geometryBakingContext,
-            ModelBaker modelBaker,
-            Function<Material, TextureAtlasSprite> sprites,
-            ModelState modelState,
-            ItemOverrides itemOverrides,
-            ResourceLocation modelLocation) {
-        var baseModel = modelBaker.bake(GuideItem.BASE_MODEL_ID, modelState, sprites);
+    public Collection<ResourceLocation> getDependencies() {
+        return dependencies;
+    }
 
-        class Loader extends CacheLoader<ResourceLocation, BakedModel> {
-            @Override
-            public BakedModel load(ResourceLocation modelId) {
-                var model = modelBaker.getModel(modelId);
-                model.resolveParents(modelBaker::getModel);
-                return model.bake(modelBaker, sprites, modelState, modelLocation);
+    @Override
+    public IBakedModel bake(
+            IModelState modelState, VertexFormat format,
+            Function<ResourceLocation, TextureAtlasSprite> sprites) {
+        var baseModel = bakeModel(GuideItem.BASE_MODEL_ID, modelState, format, sprites);
+
+        var guideModels = new HashMap<ResourceLocation, IBakedModel>();
+        for (var modelId : dependencies) {
+            if (!GuideItem.BASE_MODEL_ID.equals(modelId)) {
+                guideModels.put(modelId, bakeModel(modelId, modelState, format, sprites));
             }
         }
 
-        var modelCache = CacheBuilder.newBuilder().build(new Loader());
-
-        var overrides = new ItemOverrides() {
+        var overrides = new ItemOverrideList(List.of()) {
             @Override
-            public @Nullable BakedModel resolve(BakedModel model, ItemStack stack, @Nullable ClientLevel level,
-                    @Nullable LivingEntity entity, int seed) {
+            public IBakedModel handleItemState(
+                    IBakedModel originalModel, ItemStack stack,
+                    @Nullable World world, @Nullable EntityLivingBase entity) {
                 var guideId = GuideItem.getGuideId(stack);
                 if (guideId != null) {
                     var guide = GuideRegistry.getById(guideId);
                     if (guide != null && guide.getItemSettings().itemModel().isPresent()) {
-                        return modelCache.getUnchecked(guide.getItemSettings().itemModel().get());
+                        var model = guideModels.get(guide.getItemSettings().itemModel().get());
+                        if (model != null) {
+                            return model;
+                        }
                     }
                 }
 
@@ -57,5 +66,14 @@ public class GuideItemDispatchUnbakedModel implements IUnbakedGeometry<GuideItem
         };
 
         return new GuideItemDispatchModel(baseModel, overrides);
+    }
+
+    private static IBakedModel bakeModel(
+            ResourceLocation modelId, IModelState modelState,
+            VertexFormat format, Function<ResourceLocation, TextureAtlasSprite> sprites) {
+        return ModelLoaderRegistry.getModelOrLogError(
+                modelId,
+                "Failed to load GuideME guide item model " + modelId + ".")
+                .bake(modelState, format, sprites);
     }
 }

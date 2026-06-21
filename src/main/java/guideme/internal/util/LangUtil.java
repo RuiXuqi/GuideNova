@@ -1,9 +1,12 @@
 package guideme.internal.util;
 
+import guideme.compiler.IdUtils;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.resources.Language;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public final class LangUtil {
@@ -11,26 +14,28 @@ public final class LangUtil {
     }
 
     public static Set<String> getValidLanguages() {
-        var client = Minecraft.getInstance();
+        var client = Minecraft.getMinecraft();
         if (client != null) {
-            return client.getLanguageManager().getLanguages().keySet();
+            return client.getLanguageManager().getLanguages().stream()
+                    .map(Language::getLanguageCode)
+                    .collect(Collectors.toSet());
         }
         return Set.of("en_us");
     }
 
     public static String getCurrentLanguage() {
-        var client = Minecraft.getInstance();
+        var client = Minecraft.getMinecraft();
         if (client != null) {
             // Sometimes inexplicably, the language code is actually "en_US" instead of the minecraft default (en_us).
             // ResourceLocations crash for non-lowercase path components, so we ensure we're not crashing later
             // by forcing lowercase here.
-            return client.getLanguageManager().getSelected().toLowerCase(Locale.ROOT);
+            return client.getLanguageManager().getCurrentLanguage().getLanguageCode().toLowerCase(Locale.ROOT);
         }
         return "en_us";
     }
 
     public static ResourceLocation getTranslatedAsset(ResourceLocation assetId, String language) {
-        return assetId.withPrefix("_" + language + "/");
+        return IdUtils.withPrefix(assetId, "_" + language + "/");
     }
 
     public static ResourceLocation stripLangFromPageId(ResourceLocation pageId, Set<String> supportedLanguages) {
@@ -52,7 +57,7 @@ public final class LangUtil {
 
         var potentialLanguage = path.substring(1, firstSep);
         if (supportedLanguages.contains(potentialLanguage)) {
-            return pageId.withPath(path.substring(firstSep + 1));
+            return IdUtils.withPath(pageId, path.substring(firstSep + 1));
         }
 
         return pageId;

@@ -11,10 +11,8 @@ import guideme.internal.GuidebookText;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import java.util.ArrayList;
 import java.util.Set;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.text.TextFormatting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,23 +45,24 @@ public class CommandLinkCompiler extends FlowTagCompiler {
         link.setTooltip(buildTooltip(title, command));
 
         var pageId = compiler.getPageId();
-        link.setClickCallback(uiHost -> {
+        link.setClickCallback(_ -> {
             if (closeGuide) {
                 int attempts = 5;
-                while (Minecraft.getInstance().screen != null) {
-                    Minecraft.getInstance().screen.onClose();
+                var minecraft = Minecraft.getMinecraft();
+                while (minecraft.currentScreen != null) {
+                    minecraft.displayGuiScreen(null);
                     if (--attempts <= 0) {
                         break; // Give up at some point...
                     }
                 }
             }
 
-            var player = Minecraft.getInstance().player;
+            var player = Minecraft.getMinecraft().player;
             if (player == null) {
                 LOG.info("Cannot send command without active player.");
             } else {
                 LOG.info("Sending command from page {}: {}", pageId, sendCommand);
-                Minecraft.getInstance().player.connection.sendCommand(sendCommand);
+                player.sendChatMessage(command);
             }
         });
 
@@ -72,18 +71,18 @@ public class CommandLinkCompiler extends FlowTagCompiler {
     }
 
     private static GuideTooltip buildTooltip(String title, String command) {
-        var tooltipLines = new ArrayList<Component>();
+        var tooltipLines = new ArrayList<String>();
         if (!title.isEmpty()) {
-            tooltipLines.add(Component.literal(title));
+            tooltipLines.add(title);
         }
-        MutableComponent commandTooltipLine;
+        String commandTooltipLine;
         if (command.length() > 25) {
-            commandTooltipLine = Component.literal(command.substring(0, 25) + "...");
+            commandTooltipLine = command.substring(0, 25) + "...";
         } else {
-            commandTooltipLine = Component.literal(command);
+            commandTooltipLine = command;
         }
-        tooltipLines.add(GuidebookText.RunsCommand.text().withStyle(ChatFormatting.DARK_GRAY));
-        tooltipLines.add(commandTooltipLine.withStyle(ChatFormatting.DARK_GRAY));
+        tooltipLines.add(TextFormatting.DARK_GRAY + GuidebookText.RunsCommand.str());
+        tooltipLines.add(TextFormatting.DARK_GRAY + commandTooltipLine);
 
         return new TextTooltip(tooltipLines);
     }

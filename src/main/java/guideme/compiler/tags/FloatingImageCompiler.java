@@ -10,7 +10,6 @@ import guideme.document.flow.LytFlowInlineBlock;
 import guideme.document.flow.LytFlowParent;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import java.util.Set;
-import net.minecraft.ResourceLocationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +40,7 @@ public class FloatingImageCompiler extends FlowTagCompiler {
                 image.setTitle("Missing image: " + src);
             }
             image.setImage(imageId, imageContent);
-        } catch (ResourceLocationException e) {
+        } catch (IdUtils.ResourceLocationException e) {
             LOG.error("Invalid image id: {}", src);
             image.setTitle("Invalid image URL: " + src);
         }

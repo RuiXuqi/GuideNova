@@ -4,7 +4,7 @@ import guideme.color.LightDarkMode;
 import guideme.internal.GuideME;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,8 +22,6 @@ public final class GuiAssets {
     public static final GuiSprite WINDOW_SPRITE = sprite("window");
     public static final GuiSprite INNER_BORDER_SPRITE = sprite("window_inner");
     public static final GuiSprite SLOT_BACKGROUND = sprite("slot");
-    public static final GuiSprite SLOT_LARGE_BACKGROUND = sprite("slot_large");
-    public static final GuiSprite SLOT_BORDER = sprite("slot_border");
     public static final GuiSprite SLOT = sprite("slot");
     public static final GuiSprite LARGE_SLOT = sprite("large_slot");
     public static final GuiSprite ARROW = sprite("recipe_arrow");
@@ -54,26 +52,26 @@ public final class GuiAssets {
     }
 
     public static NineSliceSprite getNineSliceSprite(GuiSprite guiSprite, LightDarkMode mode) {
-        if (!(guiSprite.spriteScaling() instanceof GuiSpriteScaling.NineSlice nineSlice)) {
+        if (!(guiSprite
+                .spriteScaling() instanceof GuiSpriteScaling.NineSlice(int width, int height, GuiSpriteScaling.NineSlice.Border border))) {
             throw new IllegalStateException("Expected sprite " + guiSprite + " to be a nine-slice sprite!");
         }
 
         var sprite = guiSprite.atlasSprite(mode);
 
-        var border = nineSlice.border();
         // Compute the delimiting U values *in the atlas* for the three slices.
-        var u0 = sprite.getU0();
-        var u1 = sprite.getU((border.left() / (float) nineSlice.width()) * 16);
-        var u2 = sprite.getU((1 - border.right() / (float) nineSlice.width()) * 16);
-        var u3 = sprite.getU1();
+        var u0 = sprite.getMinU();
+        var u1 = sprite.getInterpolatedU((border.left() / (float) width) * 16);
+        var u2 = sprite.getInterpolatedU((1 - border.right() / (float) width) * 16);
+        var u3 = sprite.getMaxU();
         // Compute the delimiting V values *in the atlas* for the three slices.
-        var v0 = sprite.getV0();
-        var v1 = sprite.getV((border.top() / (float) nineSlice.height()) * 16);
-        var v2 = sprite.getV((1 - border.bottom() / (float) nineSlice.height()) * 16);
-        var v3 = sprite.getV1();
+        var v0 = sprite.getMinV();
+        var v1 = sprite.getInterpolatedV((border.top() / (float) height) * 16);
+        var v2 = sprite.getInterpolatedV((1 - border.bottom() / (float) height) * 16);
+        var v3 = sprite.getMaxV();
 
         return new NineSliceSprite(
-                sprite.atlasLocation(),
+                GUI_SPRITE_ATLAS,
                 new SpritePadding(border.left(), border.top(), border.right(), border.bottom()),
                 new float[] { u0, u1, u2, u3, v0, v1, v2, v3 });
     }

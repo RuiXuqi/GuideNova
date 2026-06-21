@@ -1,4 +1,3 @@
-
 package guideme.internal.search;
 
 import guideme.PageCollection;
@@ -31,7 +30,7 @@ import guideme.libs.mdast.model.MdAstThematicBreak;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,47 +72,33 @@ public final class PageIndexer implements IndexingContext {
 
     @Override
     public void indexContent(MdAstAnyContent content, IndexingSink sink) {
-        if (content instanceof MdAstThematicBreak) {
-            sink.appendBreak();
-        } else if (content instanceof MdAstList astList) {
-            indexList(astList, sink);
-        } else if (content instanceof MdAstCode astCode) {
-            sink.appendText(astCode, astCode.value);
-        } else if (content instanceof MdAstHeading astHeading) {
-            indexContent(astHeading.children(), sink);
-        } else if (content instanceof MdAstBlockquote astBlockquote) {
-            indexContent(astBlockquote.children(), sink);
-        } else if (content instanceof MdAstParagraph astParagraph) {
-            indexContent(astParagraph.children(), sink);
-        } else if (content instanceof MdAstYamlFrontmatter) {
-            // This is handled by compile directly
-        } else if (content instanceof GfmTable astTable) {
-            indexTable(astTable, sink);
-        } else if (content instanceof MdAstText astText) {
-            sink.appendText(astText, astText.value);
-        } else if (content instanceof MdAstInlineCode astCode) {
-            sink.appendText(astCode, astCode.value);
-        } else if (content instanceof MdAstStrong astStrong) {
-            indexContent(astStrong.children(), sink);
-        } else if (content instanceof MdAstEmphasis astEmphasis) {
-            indexContent(astEmphasis.children(), sink);
-        } else if (content instanceof MdAstDelete astDelete) {
-            indexContent(astDelete.children(), sink);
-        } else if (content instanceof MdAstBreak) {
-            sink.appendBreak();
-        } else if (content instanceof MdAstLink astLink) {
-            indexLink(astLink, sink);
-        } else if (content instanceof MdAstImage astImage) {
-            indexImage(astImage, sink);
-        } else if (content instanceof MdxJsxElementFields el) {
-            var compiler = tagCompilers.get(el.name());
-            if (compiler == null) {
-                LOG.warn("Unhandled custom MDX element in guide search indexing: {}", el.name());
-            } else {
-                compiler.index(this, el, sink);
+        switch (content) {
+            case MdAstThematicBreak _ -> sink.appendBreak();
+            case MdAstList astList -> indexList(astList, sink);
+            case MdAstCode astCode -> sink.appendText(astCode, astCode.value);
+            case MdAstHeading astHeading -> indexContent(astHeading.children(), sink);
+            case MdAstBlockquote astBlockquote -> indexContent(astBlockquote.children(), sink);
+            case MdAstParagraph astParagraph -> indexContent(astParagraph.children(), sink);
+            case MdAstYamlFrontmatter _ -> {
+            } // This is handled by compile directly
+            case GfmTable astTable -> indexTable(astTable, sink);
+            case MdAstText astText -> sink.appendText(astText, astText.value);
+            case MdAstInlineCode astCode -> sink.appendText(astCode, astCode.value);
+            case MdAstStrong astStrong -> indexContent(astStrong.children(), sink);
+            case MdAstEmphasis astEmphasis -> indexContent(astEmphasis.children(), sink);
+            case MdAstDelete astDelete -> indexContent(astDelete.children(), sink);
+            case MdAstBreak _ -> sink.appendBreak();
+            case MdAstLink astLink -> indexLink(astLink, sink);
+            case MdAstImage astImage -> indexImage(astImage, sink);
+            case MdxJsxElementFields el -> {
+                var compiler = tagCompilers.get(el.name());
+                if (compiler == null) {
+                    LOG.warn("Unhandled custom MDX element in guide search indexing: {}", el.name());
+                } else {
+                    compiler.index(this, el, sink);
+                }
             }
-        } else {
-            LOG.warn("Unhandled node type in guide search indexing: {}", content.type());
+            default -> LOG.warn("Unhandled node type in guide search indexing: {}", content.type());
         }
         sink.appendBreak();
     }

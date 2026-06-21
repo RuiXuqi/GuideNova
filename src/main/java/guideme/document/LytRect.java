@@ -90,6 +90,26 @@ public record LytRect(int x, int y, int width, int height) {
                 bottom - y);
     }
 
+    public static LytRect intersect(LytRect a, LytRect b) {
+        if (a.isEmpty() || b.isEmpty()) {
+            return empty();
+        }
+
+        int x = Math.max(a.x, b.x);
+        int y = Math.max(a.y, b.y);
+        int right = Math.min(a.right(), b.right());
+        int bottom = Math.min(a.bottom(), b.bottom());
+
+        if (right <= x || bottom <= y) {
+            return empty();
+        }
+
+        return new LytRect(
+                x, y,
+                right - x,
+                bottom - y);
+    }
+
     public boolean contains(LytPoint point) {
         return point.x() >= this.x && point.x() < right() &&
                 point.y() >= this.y && point.y() < bottom();

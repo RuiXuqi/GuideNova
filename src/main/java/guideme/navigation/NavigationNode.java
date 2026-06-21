@@ -1,8 +1,8 @@
 package guideme.navigation;
 
 import java.util.List;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public record NavigationNode(

@@ -1,7 +1,7 @@
 package guideme;
 
 import guideme.extensions.ExtensionCollection;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
 
 @ApiStatus.NonExtendable

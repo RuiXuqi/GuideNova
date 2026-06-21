@@ -1,19 +1,19 @@
 package guideme.internal.item;
 
-import net.minecraft.client.renderer.block.model.ItemOverrides;
-import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.renderer.block.model.IBakedModel;
+import net.minecraft.client.renderer.block.model.ItemOverrideList;
 import net.minecraftforge.client.model.BakedModelWrapper;
 
-public class GuideItemDispatchModel extends BakedModelWrapper<BakedModel> {
-    private final ItemOverrides itemOverrides;
+public class GuideItemDispatchModel extends BakedModelWrapper<IBakedModel> {
+    private final ItemOverrideList itemOverrides;
 
-    public GuideItemDispatchModel(BakedModel originalModel, ItemOverrides itemOverrides) {
+    public GuideItemDispatchModel(IBakedModel originalModel, ItemOverrideList itemOverrides) {
         super(originalModel);
         this.itemOverrides = itemOverrides;
     }
 
     @Override
-    public ItemOverrides getOverrides() {
+    public ItemOverrideList getOverrides() {
         return this.itemOverrides;
     }
 }

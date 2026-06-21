@@ -1,78 +1,101 @@
 package guideme.internal;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.mojang.serialization.JsonOps;
 import guideme.Guide;
 import guideme.color.SymbolicColorResolver;
+import guideme.compiler.IdUtils;
 import guideme.compiler.PageCompiler;
 import guideme.compiler.ParsedGuidePage;
-import guideme.internal.datadriven.DataDrivenGuide;
+import guideme.internal.datadriven.DataDrivenGuideLoader;
 import guideme.internal.util.LangUtil;
+import guideme.internal.util.ResourceUtil;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import net.minecraft.client.resources.metadata.language.LanguageMetadataSection;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
-import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
-import net.minecraft.util.profiling.ProfilerFiller;
+import java.util.function.Predicate;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.IResourceManager;
+import net.minecraft.client.resources.IResourcePack;
+import net.minecraft.client.resources.Language;
+import net.minecraft.client.resources.data.LanguageMetadataSection;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.client.resource.IResourceType;
+import net.minecraftforge.client.resource.ISelectiveResourceReloadListener;
+import net.minecraftforge.client.resource.VanillaResourceType;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class GuideReloadListener extends SimplePreparableReloadListener<GuideReloadListener.Result> {
+class GuideReloadListener implements ISelectiveResourceReloadListener {
     private static final Logger LOG = LoggerFactory.getLogger(GuideReloadListener.class);
 
-    private static final Gson GSON = new Gson();
+    private static final String MARKDOWN_SUFFIX = ".md";
 
     @Override
-    protected Result prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
-        profiler.startTick();
-        var guidePages = new IdentityHashMap<ResourceLocation, Map<ResourceLocation, ParsedGuidePage>>();
+    public void onResourceManagerReload(IResourceManager resourceManager, Predicate<IResourceType> resourcePredicate) {
+        if (!resourcePredicate.test(VanillaResourceType.LANGUAGES))
+            return;
+        var guidePages = new HashMap<ResourceLocation, Map<ResourceLocation, ParsedGuidePage>>();
 
         String language = LangUtil.getCurrentLanguage();
-        if (GuideMEClient.instance().isIgnoreTranslatedGuides()) {
+        if (GuideMEClient.isIgnoreTranslatedGuides()) {
             language = null;
         }
 
         // Load available languages to know which can be ignored
-        var languages = getAllLanguages(resourceManager);
+        var languages = getAllLanguages();
+        // Only scan huge once to improve performance
+        var scannedResources = ResourceUtil.scanAllResources(path ->
+        // Data driven guide jsons. There will be tons of jsons so we need a filter
+        DataDrivenGuideLoader.isDefinitionPath(path)
+                // Guide mds
+                || path.endsWith(MARKDOWN_SUFFIX));
 
         // Discover data driven guides now
-        var dataDrivenGuides = loadDataDrivenGuides(resourceManager);
+        var dataDrivenGuides = loadDataDrivenGuides(scannedResources);
 
         // Reload pages for data-driven guides first
         for (var guide : dataDrivenGuides.values()) {
-            guidePages.put(guide.getId(), loadPages(resourceManager, guide.getContentRootFolder(),
+            guidePages.put(guide.getId(), loadPages(scannedResources, guide.getContentRootFolder(),
                     guide.getDefaultLanguage(), language, languages));
         }
         for (var guide : GuideRegistry.getStaticGuides()) {
             if (!guidePages.containsKey(guide.getId())) {
-                guidePages.put(guide.getId(), loadPages(resourceManager, guide.getContentRootFolder(),
+                guidePages.put(guide.getId(), loadPages(scannedResources, guide.getContentRootFolder(),
                         guide.getDefaultLanguage(), language, languages));
             }
         }
 
-        profiler.endTick();
-        return new Result(dataDrivenGuides, guidePages, languages);
+        // Apply resources
+        LOG.info("Data driven guides: {}", dataDrivenGuides.keySet());
+
+        GuideRegistry.setDataDriven(dataDrivenGuides);
+
+        for (var guide : GuideRegistry.getAll()) {
+            var pagesForGuide = guidePages.getOrDefault(guide.getId(), Map.of());
+            guide.setPages(pagesForGuide);
+        }
     }
 
     /**
-     * This code is copied from the MC language manager to retrieve the list of all supported languages.
+     * This code is copied from the MC language manager to retrieve the list of all supported languages. Cannot use
+     * {@link net.minecraft.client.resources.LanguageManager#getLanguages()} here because it is updated after resource
+     * manager listeners have already run.
+     *
+     * @see net.minecraft.client.resources.LanguageManager#parseLanguageMetadata(List)
      */
-    private static Set<String> getAllLanguages(ResourceManager resourceManager) {
+    private static Set<String> getAllLanguages() {
         var result = new HashSet<String>();
-        var it = resourceManager.listPacks().iterator();
-        while (it.hasNext()) {
+        var serializer = Minecraft.getMinecraft().metadataSerializer;
+        for (IResourcePack pack : ResourceUtil.getActiveResourcePacks()) {
             try {
-                var section = it.next().getMetadataSection(LanguageMetadataSection.TYPE);
+                LanguageMetadataSection section = pack.getPackMetadata(serializer, "language");
                 if (section != null) {
-                    result.addAll(section.languages().keySet());
+                    for (Language language : section.getLanguages()) {
+                        result.add(language.getLanguageCode());
+                    }
                 }
             } catch (Exception ignored) {
                 // Minecraft itself will already warn about this
@@ -81,45 +104,14 @@ class GuideReloadListener extends SimplePreparableReloadListener<GuideReloadList
         return result;
     }
 
-    @Override
-    protected void apply(Result result, ResourceManager resourceManager, ProfilerFiller profiler) {
-        profiler.startTick();
+    private static Map<ResourceLocation, MutableGuide> loadDataDrivenGuides(
+            ResourceUtil.ScannedResources scannedResources) {
+        var guideSpecs = DataDrivenGuideLoader.load(scannedResources);
+        var dataDrivenGuides = new HashMap<ResourceLocation, MutableGuide>();
 
-        LOG.info("Data driven guides: {}", result.dataDrivenGuides.keySet());
-
-        GuideRegistry.setDataDriven(result.dataDrivenGuides);
-
-        for (var guide : GuideRegistry.getAll()) {
-            var pagesForGuide = result.guidePages.getOrDefault(guide.getId(), Map.of());
-            profiler.push(guide.getId().toString());
-            guide.setPages(pagesForGuide);
-            profiler.pop();
-        }
-        profiler.endTick();
-    }
-
-    @Override
-    public String getName() {
-        return "GuideME Reload Listener";
-    }
-
-    private static Map<ResourceLocation, MutableGuide> loadDataDrivenGuides(ResourceManager resourceManager) {
-        var dataDrivenGuideJsons = new HashMap<ResourceLocation, JsonElement>();
-        SimpleJsonResourceReloadListener.scanDirectory(resourceManager, "guideme_guides", GSON, dataDrivenGuideJsons);
-
-        // Load the data driven guides
-        Map<ResourceLocation, MutableGuide> dataDrivenGuides = new HashMap<>();
-        for (var entry : dataDrivenGuideJsons.entrySet()) {
+        for (var entry : guideSpecs.entrySet()) {
             var guideId = entry.getKey();
-
-            var result = DataDrivenGuide.CODEC.parse(JsonOps.INSTANCE, entry.getValue());
-            var error = result.error().orElse(null);
-            if (error != null) {
-                LOG.error("Failed to load data driven guide {}: {}", guideId, error.message());
-                continue;
-            }
-
-            var guideSpec = result.get().orThrow();
+            var guideSpec = entry.getValue();
 
             var builder = Guide.builder(guideId)
                     .register(false)
@@ -137,30 +129,35 @@ class GuideReloadListener extends SimplePreparableReloadListener<GuideReloadList
         return dataDrivenGuides;
     }
 
-    private static Map<ResourceLocation, ParsedGuidePage> loadPages(ResourceManager resourceManager,
+    private static Map<ResourceLocation, ParsedGuidePage> loadPages(
+            ResourceUtil.ScannedResources scannedResources,
             String contentRoot,
-            String defaultLanguage,
-            @Nullable String currentLanguage,
-            Set<String> languages) {
+            String defaultLanguage, @Nullable String currentLanguage, Set<String> languages) {
         var pagesForGuide = new HashMap<ResourceLocation, ParsedGuidePage>();
 
-        var resources = resourceManager.listResources(contentRoot, location -> location.getPath().endsWith(".md"));
+        var resources = scannedResources.scanResources(contentRoot, location -> location.endsWith(MARKDOWN_SUFFIX));
 
         for (var entry : resources.entrySet()) {
-            var pageId = new ResourceLocation(
-                    entry.getKey().getNamespace(),
-                    entry.getKey().getPath().substring((contentRoot + "/").length()));
+            var resourceId = entry.getKey();
+            // Eg: ae2:guides/ae2/main/intro/index.md under contentRoot "guides/ae2/main"
+            // becomes the guide-local page id ae2:intro/index.md.
+            var pageId = IdUtils.stripPrefix(resourceId, contentRoot + "/");
+            if (pageId == null)
+                continue;
+
             var resource = entry.getValue();
 
             if (LangUtil.getLangFromPageId(pageId, languages) != null) {
-                continue; // Skip translated pages
+                continue; // Skip translated pages.
             }
 
-            // Check for translated versions of this page
+            // Check for translated versions of this page.
             String language = defaultLanguage;
             if (currentLanguage != null) {
-                var translatedResourceId = LangUtil.getTranslatedAsset(pageId, currentLanguage)
-                        .withPrefix(contentRoot + "/");
+                // Eg: page id ae2:intro/index.md + language zh_cn becomes ae2:intro/index.zh_cn.md,
+                // then gets mapped back to the scanned resource id ae2:guides/ae2/main/intro/index.zh_cn.md.
+                var translatedResourceId = IdUtils.withPrefix(LangUtil.getTranslatedAsset(pageId, currentLanguage),
+                        contentRoot + "/");
                 var translatedPage = resources.get(translatedResourceId);
                 if (translatedPage != null) {
                     language = currentLanguage;
@@ -172,15 +169,10 @@ class GuideReloadListener extends SimplePreparableReloadListener<GuideReloadList
             try (var in = resource.open()) {
                 pagesForGuide.put(pageId, PageCompiler.parse(sourcePackId, language, pageId, in));
             } catch (IOException e) {
-                LOG.error("Failed to load guidebook page {} from pack {}", pageId, sourcePackId, e);
+                LOG.error("Failed to load guidebook page {} from {}", pageId, resource.sourcePackId(), e);
             }
         }
 
         return pagesForGuide;
-    }
-
-    protected record Result(
-            Map<ResourceLocation, MutableGuide> dataDrivenGuides,
-            Map<ResourceLocation, Map<ResourceLocation, ParsedGuidePage>> guidePages, Set<String> languages) {
     }
 }

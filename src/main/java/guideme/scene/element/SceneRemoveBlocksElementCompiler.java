@@ -6,7 +6,7 @@ import guideme.document.LytErrorSink;
 import guideme.libs.mdast.mdx.model.MdxJsxElementFields;
 import guideme.scene.GuidebookScene;
 import java.util.Set;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.init.Blocks;
 
 /**
  * Removes block states from the scene.
@@ -32,7 +32,7 @@ public class SceneRemoveBlocksElementCompiler implements SceneElementTagCompiler
         while (it.hasNext()) {
             var pos = it.next();
             if (predicate.test(level.getBlockState(pos))) {
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 0);
+                level.setBlockState(pos, Blocks.AIR.getDefaultState(), 0);
             }
         }
     }

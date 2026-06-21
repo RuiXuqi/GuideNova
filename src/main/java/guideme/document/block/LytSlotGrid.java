@@ -4,9 +4,10 @@ import guideme.document.LytRect;
 import guideme.layout.LayoutContext;
 import guideme.render.GuiAssets;
 import guideme.render.RenderContext;
+import java.util.Arrays;
 import java.util.List;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.Ingredient;
 
 public class LytSlotGrid extends LytBox {
     private final int width;
@@ -20,15 +21,15 @@ public class LytSlotGrid extends LytBox {
         this.slots = new LytSlot[width * height];
     }
 
-    public static LytSlotGrid columnFromStack(List<ItemStack> items, boolean skipEmpty) {
-        return column(items.stream().map(Ingredient::of).toList(), skipEmpty);
+    public static LytSlotGrid columnFromStacks(List<ItemStack> items, boolean skipEmpty) {
+        return columnFromIngredients(items.stream().map(Ingredient::fromStacks).toList(), skipEmpty);
     }
 
     public static LytSlotGrid rowFromStacks(List<ItemStack> items, boolean skipEmpty) {
-        return row(items.stream().map(Ingredient::of).toList(), skipEmpty);
+        return rowFromIngredients(items.stream().map(Ingredient::fromStacks).toList(), skipEmpty);
     }
 
-    public static LytSlotGrid column(List<Ingredient> ingredients, boolean skipEmpty) {
+    public static LytSlotGrid columnFromIngredients(List<Ingredient> ingredients, boolean skipEmpty) {
         if (!skipEmpty) {
             var grid = new LytSlotGrid(1, ingredients.size());
             for (int i = 0; i < ingredients.size(); i++) {
@@ -37,18 +38,18 @@ public class LytSlotGrid extends LytBox {
             return grid;
         }
 
-        var nonEmptyIngredients = (int) ingredients.stream().filter(i -> !i.isEmpty()).count();
+        var nonEmptyIngredients = (int) ingredients.stream().filter(LytSlotGrid::isNotEmpty).count();
         var grid = new LytSlotGrid(1, nonEmptyIngredients);
         var index = 0;
         for (var ingredient : ingredients) {
-            if (!ingredient.isEmpty()) {
+            if (isNotEmpty(ingredient)) {
                 grid.setIngredient(0, index++, ingredient);
             }
         }
         return grid;
     }
 
-    public static LytSlotGrid row(List<Ingredient> ingredients, boolean skipEmpty) {
+    public static LytSlotGrid rowFromIngredients(List<Ingredient> ingredients, boolean skipEmpty) {
         if (!skipEmpty) {
             var grid = new LytSlotGrid(ingredients.size(), 1);
             for (int i = 0; i < ingredients.size(); i++) {
@@ -57,11 +58,11 @@ public class LytSlotGrid extends LytBox {
             return grid;
         }
 
-        var nonEmptyIngredients = (int) ingredients.stream().filter(i -> !i.isEmpty()).count();
+        var nonEmptyIngredients = (int) ingredients.stream().filter(LytSlotGrid::isNotEmpty).count();
         var grid = new LytSlotGrid(nonEmptyIngredients, 1);
         var index = 0;
         for (var ingredient : ingredients) {
-            if (!ingredient.isEmpty()) {
+            if (isNotEmpty(ingredient)) {
                 grid.setIngredient(index++, 0, ingredient);
             }
         }
@@ -99,10 +100,14 @@ public class LytSlotGrid extends LytBox {
     }
 
     public void setItem(int x, int y, ItemStack item) {
-        setIngredient(x, y, Ingredient.of(item));
+        setIngredient(x, y, Ingredient.fromStacks(item));
     }
 
     public void setIngredient(int x, int y, Ingredient ingredient) {
+        setSlot(x, y, new LytSlot(ingredient));
+    }
+
+    private void setSlot(int x, int y, LytSlot newSlot) {
         if (x < 0 || x >= width) {
             throw new IndexOutOfBoundsException("x: " + x);
         }
@@ -117,7 +122,7 @@ public class LytSlotGrid extends LytBox {
             slots[slotIndex] = null;
         }
 
-        slot = slots[slotIndex] = new LytSlot(ingredient);
+        slot = slots[slotIndex] = newSlot;
         append(slot);
     }
 
@@ -143,5 +148,9 @@ public class LytSlotGrid extends LytBox {
 
     private int getSlotIndex(int col, int row) {
         return row * width + col;
+    }
+
+    private static boolean isNotEmpty(Ingredient ingredient) {
+        return Arrays.stream(ingredient.getMatchingStacks()).anyMatch(stack -> !stack.isEmpty());
     }
 }

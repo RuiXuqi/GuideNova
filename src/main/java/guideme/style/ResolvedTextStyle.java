@@ -1,7 +1,6 @@
 package guideme.style;
 
 import guideme.color.ColorValue;
-import net.minecraft.resources.ResourceLocation;
 
 /**
  * Represents the styling of text for rendering.
@@ -13,7 +12,7 @@ public record ResolvedTextStyle(
         boolean underlined,
         boolean strikethrough,
         boolean obfuscated,
-        ResourceLocation font,
+        boolean unicode,
         ColorValue color,
         WhiteSpaceMode whiteSpace,
         TextAlignment alignment,

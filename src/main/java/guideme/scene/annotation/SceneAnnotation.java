@@ -6,7 +6,6 @@ import guideme.document.interaction.GuideTooltip;
 import guideme.document.interaction.TextTooltip;
 import guideme.siteexport.ExportableResourceProvider;
 import guideme.siteexport.ResourceExporter;
-import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -30,8 +29,8 @@ public abstract class SceneAnnotation implements ExportableResourceProvider {
         this.tooltip = new ContentTooltip(block);
     }
 
-    public void setTooltipContent(Component component) {
-        this.tooltip = new TextTooltip(component);
+    public void setTooltipContent(String text) {
+        this.tooltip = new TextTooltip(text);
     }
 
     public boolean hasTooltip() {

@@ -2,7 +2,7 @@ package guideme.compiler;
 
 import guideme.libs.mdast.model.MdAstRoot;
 import java.util.Objects;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 public class ParsedGuidePage {
     final String sourcePack;
@@ -11,12 +11,6 @@ public class ParsedGuidePage {
     final MdAstRoot astRoot;
     final Frontmatter frontmatter;
     final String language;
-
-    @Deprecated(forRemoval = true)
-    public ParsedGuidePage(String sourcePack, ResourceLocation id, String source, MdAstRoot astRoot,
-            Frontmatter frontmatter) {
-        this(sourcePack, id, source, astRoot, frontmatter, "en_us");
-    }
 
     public ParsedGuidePage(String sourcePack, ResourceLocation id, String source, MdAstRoot astRoot,
             Frontmatter frontmatter, String language) {

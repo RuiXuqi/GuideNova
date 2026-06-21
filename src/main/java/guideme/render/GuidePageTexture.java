@@ -1,17 +1,15 @@
 package guideme.render;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import guideme.document.LytSize;
 import guideme.internal.GuideME;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.texture.TextureUtil;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.stb.STBImage;
 import org.slf4j.Logger;
@@ -80,23 +78,45 @@ public class GuidePageTexture {
     public AbstractTexture use() {
         return usedTextures.computeIfAbsent(this, guidePageTexture -> {
             if (guidePageTexture.imageContent == null) {
-                return MissingTextureAtlasSprite.getTexture();
+                return TextureUtil.MISSING_TEXTURE;
+            }
+
+            var xOut = new int[1];
+            var yOut = new int[1];
+            var compOut = new int[1];
+            ByteBuffer decoded = STBImage.stbi_load_from_memory(guidePageTexture.imageContent.asReadOnlyBuffer(),
+                    xOut, yOut, compOut, 4);
+            if (decoded == null) {
+                LOG.error("Failed to read image {}: {}", guidePageTexture.id, STBImage.stbi_failure_reason());
+                return TextureUtil.MISSING_TEXTURE;
             }
 
             try {
-                var nativeImage = NativeImage.read(guidePageTexture.imageContent);
-                return new DynamicTexture(nativeImage);
-            } catch (IOException e) {
-                LOG.error("Failed to read image {}: {}", guidePageTexture.id, e.toString());
-                return MissingTextureAtlasSprite.getTexture();
+                int width = xOut[0];
+                int height = yOut[0];
+                var dynamicTexture = new DynamicTexture(width, height);
+                var pixels = dynamicTexture.getTextureData();
+
+                for (int i = 0; i < width * height; i++) {
+                    int r = decoded.get(i * 4) & 0xFF;
+                    int g = decoded.get(i * 4 + 1) & 0xFF;
+                    int b = decoded.get(i * 4 + 2) & 0xFF;
+                    int a = decoded.get(i * 4 + 3) & 0xFF;
+                    pixels[i] = a << 24 | r << 16 | g << 8 | b;
+                }
+
+                dynamicTexture.updateDynamicTexture();
+                return dynamicTexture;
+            } finally {
+                STBImage.stbi_image_free(decoded);
             }
         });
     }
 
     public static void releaseUsedTextures() {
         for (DynamicTexture texture : usedTextures.values()) {
-            if (texture != MissingTextureAtlasSprite.getTexture()) {
-                texture.close();
+            if (texture != TextureUtil.MISSING_TEXTURE) {
+                texture.deleteGlTexture();
             }
         }
         usedTextures.clear();

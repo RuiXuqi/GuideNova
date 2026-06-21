@@ -4,6 +4,7 @@ import guideme.Guide;
 import guideme.GuideItemSettings;
 import guideme.GuidePage;
 import guideme.GuidePageChange;
+import guideme.compiler.IdUtils;
 import guideme.compiler.PageCompiler;
 import guideme.compiler.ParsedGuidePage;
 import guideme.extensions.ExtensionCollection;
@@ -11,6 +12,7 @@ import guideme.indices.PageIndex;
 import guideme.internal.screen.GuideScreen;
 import guideme.internal.util.LangUtil;
 import guideme.navigation.NavigationTree;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -23,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -154,8 +156,8 @@ public final class MutableGuide implements Guide {
     public byte[] loadAsset(ResourceLocation id) {
         // Try loading the language specific version first
         var language = LangUtil.getCurrentLanguage();
-        if (!GuideMEClient.instance().isIgnoreTranslatedGuides() && !Objects.equals(language, defaultLanguage)) {
-            var result = loadAssetInternal(id.withPrefix("_" + language + "/"));
+        if (!GuideMEClient.isIgnoreTranslatedGuides() && !Objects.equals(language, defaultLanguage)) {
+            var result = loadAssetInternal(IdUtils.withPrefix(id, "_" + language + "/"));
             if (result != null) {
                 return result;
             }
@@ -177,16 +179,15 @@ public final class MutableGuide implements Guide {
         }
 
         // Transform id such that the path is prefixed with "ae2assets", the source folder for the guidebook assets
-        id = new ResourceLocation(id.getNamespace(), folder + "/" + id.getPath());
+        id = IdUtils.build(id.getNamespace(), folder + "/" + id.getPath());
 
-        var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElse(null);
-        if (resource == null) {
-            return null;
-        }
-        try (var input = resource.open()) {
+        try (var resource = Minecraft.getMinecraft().getResourceManager().getResource(id);
+                var input = resource.getInputStream()) {
             return input.readAllBytes();
+        } catch (FileNotFoundException | NoSuchFileException e) {
+            return null;
         } catch (IOException e) {
-            LOG.error("Failed to open guidebook asset {}", id);
+            LOG.error("Failed to open guidebook asset {}", id, e);
             return null;
         }
     }
@@ -324,7 +325,7 @@ public final class MutableGuide implements Guide {
         this.navigationTree = buildNavigation();
 
         // Reload the current page if it has been changed
-        if (Minecraft.getInstance().screen instanceof GuideScreen guideScreen) {
+        if (Minecraft.getMinecraft().currentScreen instanceof GuideScreen guideScreen) {
             var currentPageId = guideScreen.getCurrentPageId();
             if (changes.stream().anyMatch(c -> c.pageId().equals(currentPageId))) {
                 guideScreen.reloadPage();

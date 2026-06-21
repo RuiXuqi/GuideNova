@@ -1,10 +1,9 @@
 package guideme.color;
 
-import net.minecraft.util.FastColor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-final class Colors {
+public final class Colors {
     private static final Logger LOG = LoggerFactory.getLogger(Colors.class);
 
     /**
@@ -71,7 +70,7 @@ final class Colors {
     }
 
     public static int argb(int a, int r, int g, int b) {
-        return FastColor.ARGB32.color(a, r, g, b);
+        return ARGB.color(a, r, g, b);
     }
 
     public static int rgb(int r, int g, int b) {

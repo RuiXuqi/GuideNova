@@ -37,7 +37,7 @@ public class ItemLinkCompiler extends FlowTagCompiler {
         if (linksTo == null || linksTo.anchor() == null && compiler.getPageId().equals(linksTo.pageId())) {
             var span = new LytTooltipSpan();
             span.modifyStyle(style -> style.italic(true));
-            span.appendComponent(stack.getHoverName());
+            span.appendText(stack.getDisplayName());
             span.setTooltip(new ItemTooltip(stack));
             parent.append(span);
         } else {
@@ -45,7 +45,7 @@ public class ItemLinkCompiler extends FlowTagCompiler {
             link.setClickCallback(screen -> {
                 screen.navigateTo(linksTo);
             });
-            link.appendComponent(stack.getHoverName());
+            link.appendText(stack.getDisplayName());
             link.setTooltip(new ItemTooltip(stack));
             parent.append(link);
         }

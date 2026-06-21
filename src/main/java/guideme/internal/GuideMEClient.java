@@ -3,107 +3,89 @@ package guideme.internal;
 import guideme.Guide;
 import guideme.PageAnchor;
 import guideme.color.LightDarkMode;
-import guideme.internal.command.GuideClientCommand;
-import guideme.internal.command.StructureCommands;
-import guideme.internal.data.GuideMELanguageProvider;
-import guideme.internal.data.GuideMEModelProvider;
-import guideme.internal.hotkey.OpenGuideHotkey;
+import guideme.internal.atlas.GuiAtlas;
+import guideme.internal.atlas.JsonAtlasPopulator;
 import guideme.internal.item.GuideItem;
-import guideme.internal.item.GuideItemDispatchModelLoader;
 import guideme.internal.screen.GlobalInMemoryHistory;
 import guideme.internal.screen.GuideNavigation;
 import guideme.internal.search.GuideSearch;
+import guideme.internal.util.config.ConfigBuilder;
+import guideme.internal.util.config.ConfigUtil;
+import guideme.internal.util.config.MouseWheelSensitivityEntry;
 import guideme.render.GuiAssets;
-import java.util.Objects;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.data.DataGenerator;
-import net.minecraft.data.PackOutput;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraftforge.client.event.ModelEvent;
-import net.minecraftforge.client.event.RegisterClientCommandsEvent;
-import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
-import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.block.model.ModelResourceLocation;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.SoundEvent;
+import net.minecraftforge.client.event.ModelRegistryEvent;
 import net.minecraftforge.client.event.TextureStitchEvent;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.data.event.GatherDataEvent;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.registries.RegisterEvent;
+import net.minecraftforge.client.model.ModelLoader;
+import net.minecraftforge.event.RegistryEvent;
+import net.minecraftforge.fml.client.event.ConfigChangedEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.fml.relauncher.Side;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class GuideMEClient {
     private static final Logger LOG = LoggerFactory.getLogger(GuideMEClient.class);
 
-    private static GuideMEClient INSTANCE;
-
     public static final ResourceLocation GUIDE_CLICK_ID = GuideME.makeId("guide.click");
-    public static SoundEvent GUIDE_CLICK_EVENT = SoundEvent.createVariableRangeEvent(GUIDE_CLICK_ID);
+    public static final SoundEvent GUIDE_CLICK_EVENT = new SoundEvent(GUIDE_CLICK_ID).setRegistryName(GUIDE_CLICK_ID);
 
-    private final GuideSearch search = new GuideSearch();
+    public static final ResourceLocation NOISE_ID = GuideME.makeId("blocks/noise");
 
-    private GuiSpriteAtlas guiAtlas;
+    public static final GuideSearch SEARCH = new GuideSearch();
 
-    public GuideMEClient(ModLoadingContext context, IEventBus modBus) {
-        INSTANCE = this;
-        GuideME.PROXY = new GuideMEClientProxy();
+    public static final GuiAtlas GUI_ATLAS = new GuiAtlas("textures", new JsonAtlasPopulator(GuideME.makeId("gui")));
 
-        context.registerConfig(ModConfig.Type.CLIENT, clientConfig.spec, "guideme.toml");
-
-        modBus.addListener((RegisterEvent e) -> {
-            if (e.getRegistryKey() == Registries.SOUND_EVENT) {
-                e.register(Registries.SOUND_EVENT, GUIDE_CLICK_ID, () -> GUIDE_CLICK_EVENT);
-            }
-        });
-        modBus.addListener(this::gatherData);
-        modBus.addListener(this::registerHotkeys);
-
-        MinecraftForge.EVENT_BUS.addListener(this::registerClientCommands);
-        MinecraftForge.EVENT_BUS.addListener(this::registerCommands);
-        modBus.addListener(this::resetSprites);
-
-        OpenGuideHotkey.init();
-
-        modBus.addListener((ModelEvent.RegisterAdditional e) -> {
-            e.register(GuideItem.BASE_MODEL_ID);
-        });
-        modBus.addListener((ModelEvent.RegisterGeometryLoaders e) -> e.register(
-                GuideItemDispatchModelLoader.ID.getPath(), new GuideItemDispatchModelLoader()));
-
-        modBus.addListener((RegisterClientReloadListenersEvent evt) -> {
-            evt.registerReloadListener(new GuideReloadListener());
-        });
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent evt) -> {
-            if (evt.phase == TickEvent.Phase.START) {
-                search.processWork();
-                processDevWatchers();
-            }
-        });
-
-        modBus.addListener(this::registerReloadListener);
-
-        GuideOnStartup.init(modBus);
-    }
-
-    private void registerReloadListener(RegisterClientReloadListenersEvent ev) {
-        if (guiAtlas == null) {
-            guiAtlas = new GuiSpriteAtlas(
-                    Minecraft.getInstance().textureManager,
-                    GuiAssets.GUI_SPRITE_ATLAS,
-                    GuideME.makeId("gui"));
+    @Mod.EventBusSubscriber(value = Side.CLIENT, modid = Reference.MOD_ID)
+    private static class GuideMEClientEvents {
+        @SubscribeEvent
+        public static void registerSounds(RegistryEvent.Register<SoundEvent> evt) {
+            evt.getRegistry().register(GUIDE_CLICK_EVENT);
         }
 
-        ev.registerReloadListener(guiAtlas);
+        @SubscribeEvent
+        public static void onTextureStitchPre(TextureStitchEvent.Pre evt) {
+            if (evt.getMap() == Minecraft.getMinecraft().getTextureMapBlocks()) {
+                evt.getMap().registerSprite(NOISE_ID);
+            }
+        }
+
+        @SubscribeEvent
+        public static void onTextureStitchPost(TextureStitchEvent.Post evt) {
+            if (evt.getMap() == GuideMEClient.GUI_ATLAS) {
+                GuiAssets.resetSprites();
+            }
+        }
+
+        @SubscribeEvent
+        public static void registerModels(ModelRegistryEvent evt) {
+            ModelLoader.setCustomModelResourceLocation(GuideME.GUIDE_ITEM, 0,
+                    new ModelResourceLocation(GuideItem.ID, "inventory"));
+        }
+
+        @SubscribeEvent
+        public static void onClientTick(TickEvent.ClientTickEvent evt) {
+            if (evt.phase == TickEvent.Phase.START) {
+                SEARCH.processWork();
+                processDevWatchers();
+            }
+        }
+
+        @SubscribeEvent
+        public static void onConfigChanged(ConfigChangedEvent.OnConfigChangedEvent evt) {
+            if (evt.getModID().equals(Reference.MOD_ID)) {
+                GuideMEConfig.readFromProp();
+            }
+        }
     }
 
-    private void processDevWatchers() {
+    private static void processDevWatchers() {
         for (var guide : GuideRegistry.getAll()) {
             guide.tick();
         }
@@ -113,70 +95,45 @@ public class GuideMEClient {
         return LightDarkMode.LIGHT_MODE;
     }
 
-    private void resetSprites(TextureStitchEvent event) {
-        if (event.getAtlas().location().equals(GuiAssets.GUI_SPRITE_ATLAS)) {
-            GuiAssets.resetSprites();
-        }
+    public static boolean isShowDebugGuiOverlays() {
+        return ClientConfig.showDebugGuiOverlays;
     }
 
-    private void registerHotkeys(RegisterKeyMappingsEvent e) {
-        e.register(OpenGuideHotkey.getHotkey());
+    public static boolean isAdaptiveScalingEnabled() {
+        return ClientConfig.adaptiveScaling;
     }
 
-    public static GuideMEClient instance() {
-        return Objects.requireNonNull(INSTANCE, "Mod is not initialized");
+    public static boolean isIgnoreTranslatedGuides() {
+        return ClientConfig.ignoreTranslatedGuides;
     }
 
-    private final ClientConfig clientConfig = new ClientConfig();
-
-    private void registerClientCommands(RegisterClientCommandsEvent evt) {
-        var dispatcher = evt.getDispatcher();
-        GuideClientCommand.register(dispatcher);
+    public static boolean isHideMissingRecipeErrors() {
+        return ClientConfig.hideMissingRecipeErrors;
     }
 
-    // These are meant for command blocks only usable in single player
-    private void registerCommands(RegisterCommandsEvent event) {
-        StructureCommands.register(event.getDispatcher());
+    public static boolean isFullWidthLayout() {
+        return ClientConfig.fullWidthLayout;
     }
 
-    private void gatherData(GatherDataEvent event) {
-        DataGenerator gen = event.getGenerator();
-        PackOutput packOutput = gen.getPackOutput();
-        gen.addProvider(event.includeClient(), new GuideMELanguageProvider(packOutput));
-        gen.addProvider(event.includeClient(), new GuideMEModelProvider(packOutput, event.getExistingFileHelper()));
-    }
-
-    public boolean isShowDebugGuiOverlays() {
-        return clientConfig.showDebugGuiOverlays.get();
-    }
-
-    public boolean isAdaptiveScalingEnabled() {
-        return clientConfig.adaptiveScaling.get();
-    }
-
-    public boolean isIgnoreTranslatedGuides() {
-        return clientConfig.ignoreTranslatedGuides.get();
-    }
-
-    public boolean isHideMissingRecipeErrors() {
-        return clientConfig.hideMissingRecipeErrors.get();
-    }
-
-    public boolean isFullWidthLayout() {
-        return clientConfig.fullWidthLayout.get();
-    }
-
-    public void setFullWidthLayout(boolean fullWidth) {
+    public static void setFullWidthLayout(boolean fullWidth) {
         if (fullWidth != isFullWidthLayout()) {
-            clientConfig.fullWidthLayout.set(fullWidth);
-            clientConfig.spec.save();
-            var minecraft = Minecraft.getInstance();
-            var screen = minecraft.screen;
+            ClientConfig.fullWidthLayout = fullWidth;
+            GuideMEConfig.save();
+            var minecraft = Minecraft.getMinecraft();
+            var screen = minecraft.currentScreen;
             if (screen != null) {
-                var window = minecraft.getWindow();
-                screen.resize(minecraft, window.getGuiScaledWidth(), window.getGuiScaledHeight());
+                var sr = new ScaledResolution(minecraft);
+                screen.onResize(minecraft, sr.getScaledWidth(), sr.getScaledHeight());
             }
         }
+    }
+
+    public static double getScrollSensitivity() {
+        return ClientConfig.scrollSensitivity;
+    }
+
+    public static boolean isDiscreteScrolling() {
+        return ClientConfig.discreteScrolling;
     }
 
     public static boolean openGuideAtPreviousPage(Guide guide, ResourceLocation initialPage) {
@@ -205,53 +162,63 @@ public class GuideMEClient {
         }
     }
 
-    public GuideSearch getSearch() {
-        return search;
-    }
+    static class ClientConfig {
+        static boolean ignoreTranslatedGuides = false;
+        static boolean hideMissingRecipeErrors = false;
 
-    private static class ClientConfig {
-        final ForgeConfigSpec spec;
-        final ForgeConfigSpec.BooleanValue adaptiveScaling;
-        final ForgeConfigSpec.BooleanValue showDebugGuiOverlays;
-        final ForgeConfigSpec.BooleanValue fullWidthLayout;
-        final ForgeConfigSpec.BooleanValue ignoreTranslatedGuides;
-        final ForgeConfigSpec.BooleanValue hideMissingRecipeErrors;
+        static boolean adaptiveScaling = true;
+        static boolean fullWidthLayout = true;
 
-        public ClientConfig() {
-            var builder = new ForgeConfigSpec.Builder();
+        static boolean showDebugGuiOverlays = false;
 
-            builder.push("guides");
-            ignoreTranslatedGuides = builder
-                    .comment("Never load translated guide pages for your current language.")
-                    .define("ignoreTranslatedGuides", false);
-            hideMissingRecipeErrors = builder
-                    .comment(
-                            "Never show errors in guides when recipes can't be found (i.e. because they were hidden by a datapack).")
-                    .define("hideMissingRecipeErrors", false);
-            builder.pop();
+        static double scrollSensitivity = 1.0D;
+        static boolean discreteScrolling = false;
 
-            builder.push("gui");
-            adaptiveScaling = builder
-                    .comment(
-                            "Adapt GUI scaling for the Guide screen to fix Minecraft font issues at GUI scale 1 and 3.")
-                    .define("adaptiveScaling", true);
-            fullWidthLayout = builder
-                    .comment(
-                            "Use the full width of the screen for the guide when it is opened.")
-                    .define("fullWidthLayout", true);
-            builder.pop();
+        static void build(ConfigBuilder builder) {
+            builder.pushCategory("guides", "Advanced Debugging Settings for Guide development");
+            ignoreTranslatedGuides = builder.get(
+                    "ignoreTranslatedGuides",
+                    ignoreTranslatedGuides,
+                    "Never load translated guide pages for your current language.");
+            hideMissingRecipeErrors = builder.get(
+                    "hideMissingRecipeErrors",
+                    hideMissingRecipeErrors,
+                    "Never show errors in guides when recipes can't be found (i.e. because they were hidden by a datapack).");
+            builder.popCategory();
 
-            builder.push("debug");
-            showDebugGuiOverlays = builder
-                    .comment("Show debugging overlays in GUI on mouse-over.")
-                    .define("showDebugGuiOverlays", false);
-            builder.pop();
+            builder.pushCategory("gui");
+            adaptiveScaling = builder.get(
+                    "adaptiveScaling",
+                    adaptiveScaling,
+                    "Adapt GUI scaling for the Guide screen to fix Minecraft font issues at GUI scale 1 and 3.");
+            fullWidthLayout = builder.get(
+                    "fullWidthLayout",
+                    fullWidthLayout,
+                    "Use the full width of the screen for the guide when it is opened.");
+            builder.popCategory();
 
-            spec = builder.build();
+            builder.pushCategory("debug");
+            showDebugGuiOverlays = builder.get(
+                    "showDebugGuiOverlays",
+                    showDebugGuiOverlays,
+                    "Show debugging overlays in GUI on mouse-over.");
+            builder.popCategory();
+
+            builder.pushCategory("control");
+            var scrollSensitivityP = builder.getProp(
+                    "scrollSensitivity",
+                    scrollSensitivity,
+                    "Adjusts how far screens scroll for each mouse wheel step.").setMinValue(0.01D).setMaxValue(10.00D);
+            scrollSensitivityP.setConfigEntryClass(MouseWheelSensitivityEntry.class);
+            ConfigUtil.validifyRange(scrollSensitivityP);
+            ConfigUtil.commentRange(scrollSensitivityP);
+            scrollSensitivity = scrollSensitivityP.getDouble();
+
+            discreteScrolling = builder.get(
+                    "discreteScrolling",
+                    discreteScrolling,
+                    "Treats each wheel event as a single step regardless of high-resolution mouse or touchpad scroll distance.");
+            builder.popCategory();
         }
-    }
-
-    public TextureAtlas getGuiSpriteAtlas() {
-        return Objects.requireNonNull(guiAtlas).getTextureAtlas();
     }
 }

@@ -29,13 +29,9 @@ import guideme.ui.GuideUiHost;
 import guideme.ui.UiPoint;
 import java.util.List;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.ModContainer;
-import net.minecraftforge.fml.ModList;
-import net.minecraftforge.forgespi.language.IModInfo;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.Loader;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +47,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
     private final NavigationToolbar toolbar;
 
     @Nullable
-    private Screen returnToOnClose;
+    private GuiScreen returnToOnClose;
 
     /**
      * When the guidebook is initially opened, it does not do a proper layout due to missing width/height info. When we
@@ -64,7 +60,6 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
     private final GuideNavBar navbar;
 
     private GuideScreen(Guide guide, PageAnchor anchor) {
-        super(Component.literal("GuideME Guidebook"));
         this.guide = guide;
 
         this.pageTitle = new LytParagraph();
@@ -96,11 +91,11 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
     }
 
     @Override
-    protected void init() {
-        super.init();
+    public void initGui() {
+        super.initGui();
 
-        addRenderableWidget(navbar);
-        toolbar.addToScreen(this::addRenderableWidget);
+        addButton(navbar);
+        toolbar.addToScreen(this::addButton);
 
         updateScreenLayout();
     }
@@ -112,7 +107,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
 
         // If there is enough space, always expand the navbar
         navbar.setPinned(hasSpaceForSidebar());
-        navbar.setX(screenRect.x());
+        navbar.x = screenRect.x();
 
         var left = screenRect.x();
         if (!navbar.isPinned() && left < GuideNavBar.WIDTH_CLOSED) {
@@ -128,7 +123,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
         toolbar.move(screenRect.right() - toolbar.getWidth(), toolbarTop);
 
         if (navbar.isPinned()) {
-            left = screenRect.x() + navbar.getWidth();
+            left = screenRect.x() + navbar.width;
         }
 
         setDocumentRect(new LytRect(
@@ -139,19 +134,19 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
 
         if (navbar.isPinned()) {
             // Move the navbar to below the title
-            navbar.setY(getDocumentRect().y());
-            navbar.setHeight(getDocumentRect().height());
+            navbar.y = getDocumentRect().y();
+            navbar.height = getDocumentRect().height();
         } else {
-            navbar.setY(screenRect.y());
-            navbar.setHeight(screenRect.height());
+            navbar.y = screenRect.y();
+            navbar.height = screenRect.height();
         }
 
         updateDocumentLayout();
     }
 
     @Override
-    public void tick() {
-        super.tick();
+    public void updateScreen() {
+        super.updateScreen();
 
         toolbar.update();
 
@@ -199,8 +194,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
     }
 
     @Override
-    public void scaledRender(GuiGraphics guiGraphics, RenderContext context, int mouseX, int mouseY,
-            float partialTick) {
+    protected void scaledRender(RenderContext context, int mouseX, int mouseY, float partialTick) {
         context.fillIcon(screenRect, GuiAssets.GUIDE_BACKGROUND, SymbolicColor.GUIDE_SCREEN_BACKGROUND);
 
         var documentRect = getDocumentRect();
@@ -208,9 +202,8 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
 
         renderDocument(context);
 
-        var poseStack = guiGraphics.pose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 200);
+        context.push();
+        context.translate(0, 0, 200);
 
         renderTitle(documentRect, context);
 
@@ -218,11 +211,12 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
             renderFooter(documentRect, context);
         }
 
-        super.scaledRender(guiGraphics, context, mouseX, mouseY, partialTick);
+        navbar.renderCtx(context, mouseX, mouseY, partialTick);
+        super.scaledRender(context, mouseX, mouseY, partialTick);
 
-        poseStack.popPose();
+        context.pop();
 
-        renderDocumentTooltip(guiGraphics, mouseX, mouseY, partialTick);
+        renderDocumentTooltip(context, mouseX, mouseY, partialTick);
     }
 
     private void renderFooter(LytRect documentRect, RenderContext context) {
@@ -230,7 +224,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
         var externalSource = getExternalSourceName();
         if (externalSource != null) {
             var paragraph = new LytParagraph();
-            paragraph.appendText(GuidebookText.ContentFrom.text().getString() + " ");
+            paragraph.appendText(GuidebookText.ContentFrom.text().getFormattedText() + " ");
             var sourceSpan = new LytFlowSpan();
 
             sourceSpan.appendText(externalSource);
@@ -239,9 +233,7 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
             paragraph.setStyle(TextStyle.builder().alignment(TextAlignment.RIGHT).build());
             var layoutContext = new LayoutContext(new MinecraftFontMetrics());
             paragraph.layout(layoutContext, documentRect.x(), documentRect.bottom(), documentRect.width());
-            var buffers = context.beginBatch();
-            paragraph.renderBatch(context, buffers);
-            context.endBatch(buffers);
+            paragraph.render(context);
         }
     }
 
@@ -256,32 +248,31 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
      */
     @Nullable
     private String getExternalSourceName() {
-        var pack = Minecraft.getInstance().getResourcePackRepository().getPack(currentPage.sourcePack());
-        if (pack != null && !pack.getId().equals("mod_resources")) {
-            return pack.getDescription().getString();
+        if (!currentPage.sourcePack().startsWith("mod:")) {
+            for (var entry : Minecraft.getMinecraft().getResourcePackRepository().getRepositoryEntries()) {
+                if (entry.getResourcePackName().equals(currentPage.sourcePack())) {
+                    return entry.getTexturePackDescription();
+                }
+            }
         }
 
         var pageNamespace = currentPage.id().getNamespace();
         // If the page had an ID under another mod's namespace, we have to use the mod-list to resolve its name
         if (!guide.getDefaultNamespace().equals(pageNamespace)) {
-            return ModList.get().getModContainerById(pageNamespace)
-                    .map(ModContainer::getModInfo)
-                    .map(IModInfo::getDisplayName)
-                    .orElse(null);
+            var mod = Loader.instance().getIndexedModList().get(pageNamespace);
+            return mod != null ? mod.getName() : null;
         }
 
         return null;
     }
 
     @Override
-    public void renderBackground(GuiGraphics guiGraphics) {
+    public void drawWorldBackground(int tint) {
         // Stub this out otherwise vanilla renders a background on top of our content
     }
 
     private void renderTitle(LytRect documentRect, RenderContext context) {
-        var buffers = context.beginBatch();
-        pageTitle.renderBatch(context, buffers);
-        context.endBatch(buffers);
+        pageTitle.render(context);
         var separatorRect = new LytRect(
                 screenRect.x(),
                 documentRect.y() - 1,
@@ -362,20 +353,14 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
                 pageSource);
     }
 
-    @Override
-    public void removed() {
-        super.removed();
-        GuidePageTexture.releaseUsedTextures();
-    }
-
     /**
      * Sets a screen to return to when closing this guide.
      */
-    public void setReturnToOnClose(@Nullable Screen screen) {
+    public void setReturnToOnClose(@Nullable GuiScreen screen) {
         this.returnToOnClose = screen;
     }
 
-    public @Nullable Screen getReturnToOnClose() {
+    public @Nullable GuiScreen getReturnToOnClose() {
         return returnToOnClose;
     }
 
@@ -416,9 +401,15 @@ public class GuideScreen extends DocumentScreen implements GuideUiHost {
     }
 
     @Override
-    public void onClose() {
-        if (minecraft != null && minecraft.screen == this && this.returnToOnClose != null) {
-            minecraft.setScreen(this.returnToOnClose);
+    public void onGuiClosed() {
+        super.onGuiClosed();
+        GuidePageTexture.releaseUsedTextures();
+    }
+
+    @Override
+    protected void onClose() {
+        if (mc != null && mc.currentScreen == this && this.returnToOnClose != null) {
+            mc.displayGuiScreen(this.returnToOnClose);
             this.returnToOnClose = null;
             return;
         }

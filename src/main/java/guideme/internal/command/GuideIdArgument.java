@@ -1,43 +1,26 @@
 package guideme.internal.command;
 
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.suggestion.Suggestions;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import guideme.compiler.IdUtils;
 import guideme.internal.GuideMEProxy;
 import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.resources.ResourceLocation;
+import java.util.stream.Collectors;
+import net.minecraft.command.CommandException;
+import net.minecraft.util.ResourceLocation;
 
-/**
- * An argument for commands that identifies a registered GuideME guide.
- */
-public class GuideIdArgument implements ArgumentType<ResourceLocation> {
-    private static final List<String> EXAMPLES = List.of("ae2:guide");
-
-    public static GuideIdArgument argument() {
-        return new GuideIdArgument();
+public final class GuideIdArgument {
+    private GuideIdArgument() {
     }
 
-    public ResourceLocation parse(StringReader reader) throws CommandSyntaxException {
-        return ResourceLocation.read(reader);
+    public static ResourceLocation parse(String value) throws CommandException {
+        var guideId = IdUtils.tryParse(value);
+        if (guideId == null)
+            throw new CommandException("guideme.argument.resource_or_id.invalid", value);
+        return guideId;
     }
 
-    public static ResourceLocation getGuide(CommandContext<?> context, String name) {
-        return context.getArgument(name, ResourceLocation.class);
-    }
-
-    @Override
-    public <S> CompletableFuture<Suggestions> listSuggestions(CommandContext<S> context, SuggestionsBuilder builder) {
-        SharedSuggestionProvider.suggestResource(GuideMEProxy.instance().getAvailableGuides(), builder);
-        return builder.buildFuture();
-    }
-
-    public Collection<String> getExamples() {
-        return EXAMPLES;
+    public static Collection<String> listSuggestions() {
+        return GuideMEProxy.instance().getAvailableGuides()
+                .map(ResourceLocation::toString)
+                .collect(Collectors.toList());
     }
 }

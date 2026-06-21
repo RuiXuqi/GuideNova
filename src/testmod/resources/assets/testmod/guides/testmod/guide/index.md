@@ -19,10 +19,11 @@ You may ~~need~~ a <Color color="#ff0000">door</Color> <Color id="test_color">do
 
 <CommandLink command="/tp @s 0 90 0" title="Tooltip" close={true}>Teleport!</CommandLink>
 
-<ItemLink id="minecraft:stick" tag="{display:{Name:'{&quot;text&quot;:&quot;Custom name&quot;}'}}" />
+<ItemLink id="minecraft:stick" tag="{display:{Name:&quot;Custom name&quot;}}" />
 
 <GameScene zoom={4} interactive={true}>
     <Entity id="minecraft:sheep" data="{Color: 2}" />
+    <Block id="minecraft:water" />
 </GameScene>
 
 <GameScene zoom={4}>
@@ -31,13 +32,13 @@ You may ~~need~~ a <Color color="#ff0000">door</Color> <Color id="test_color">do
     <ImportStructure src="redstone_test.nbt" pos="1 0 1" />
 </GameScene>
 
-<RecipeFor id="minecraft:oak_door" />
-<Recipe id="minecraft:iron_nugget_from_blasting" />
+<RecipeFor id="minecraft:wooden_door" />
+<RecipeFor id="minecraft:iron_ingot" type="minecraft:smelting" />
 
 <GameScene zoom={2}>
   <ImportStructure src="test.nbt" />
 
-  <BlockAnnotationTemplate id="minecraft:stripped_spruce_log" p:axis="x">
+  <BlockAnnotationTemplate id="minecraft:log" p:variant="spruce" p:axis="x">
     <DiamondAnnotation pos="0.5 0.5 0.5" color="#ff0000">
       This will be shown in the tooltip! <ItemImage id="minecraft:stone" />
     </DiamondAnnotation>
@@ -51,19 +52,19 @@ You may ~~need~~ a <Color color="#ff0000">door</Color> <Color id="test_color">do
 ## Recipes
 
 <Row>
-    <RecipeFor id="minecraft:oak_planks" />
-    <RecipeFor id="minecraft:red_bed" />
+    <RecipeFor id="minecraft:planks" meta="0" />
+    <RecipeFor id="minecraft:bed" meta="14" />
     <RecipeFor id="minecraft:stick" />
-    <RecipesFor id="minecraft:green_bed" />
+    <RecipesFor id="minecraft:bed" meta="13" />
 </Row>
 
 ***
 
 <Row>
-  <BlockImage id="minecraft:oak_log" scale="4" />
-  <BlockImage id="minecraft:spruce_log" scale="4" />
-  <BlockImage id="minecraft:acacia_log" scale="4" />
-  <BlockImage id="minecraft:birch_log" scale="4" />
-  <BlockImage id="minecraft:jungle_log" scale="4" />
-  <BlockImage id="minecraft:mangrove_log" scale="4" />
+  <BlockImage id="minecraft:log" p:variant="oak" scale="4" />
+  <BlockImage id="minecraft:log" p:variant="spruce" scale="4" />
+  <BlockImage id="minecraft:log2" p:variant="acacia" scale="4" />
+  <BlockImage id="minecraft:log" p:variant="birch" scale="4" />
+  <BlockImage id="minecraft:log" p:variant="jungle" scale="4" />
+  <BlockImage id="minecraft:log2" p:variant="dark_oak" scale="4" />
 </Row>

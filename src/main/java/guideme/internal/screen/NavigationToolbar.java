@@ -6,7 +6,7 @@ import guideme.internal.GuideMEClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.GuiButton;
 import org.jetbrains.annotations.Nullable;
 
 public class NavigationToolbar {
@@ -67,7 +67,7 @@ public class NavigationToolbar {
     public void update() {
         updateLayout();
 
-        if (GuideMEClient.instance().isFullWidthLayout()) {
+        if (GuideMEClient.isFullWidthLayout()) {
             toggleFullWidthButton.setRole(GuideIconButton.Role.CLOSE_FULL_WIDTH_VIEW);
         } else {
             toggleFullWidthButton.setRole(GuideIconButton.Role.OPEN_FULL_WIDTH_VIEW);
@@ -75,12 +75,12 @@ public class NavigationToolbar {
 
         if (guide != null) {
             var history = GlobalInMemoryHistory.get(guide);
-            backButton.active = history.peekBack().isPresent();
-            forwardButton.active = history.peekForward().isPresent();
+            backButton.enabled = history.peekBack().isPresent();
+            forwardButton.enabled = history.peekForward().isPresent();
         }
     }
 
-    public void addToScreen(Consumer<AbstractWidget> addWidget) {
+    public void addToScreen(Consumer<GuiButton> addWidget) {
         addWidget.accept(closeButton);
         addWidget.accept(toggleFullWidthButton);
         if (guide != null) {
@@ -112,7 +112,7 @@ public class NavigationToolbar {
     }
 
     private void toggleFullWidth() {
-        GuideMEClient.instance().setFullWidthLayout(!GuideMEClient.instance().isFullWidthLayout());
+        GuideMEClient.setFullWidthLayout(!GuideMEClient.isFullWidthLayout());
     }
 
     private void startSearch() {
@@ -136,7 +136,7 @@ public class NavigationToolbar {
     public int getWidth() {
         int width = 0;
         for (var button : buttons) {
-            width += button.getWidth() + GAP;
+            width += button.width + GAP;
         }
         return width;
     }
@@ -147,9 +147,9 @@ public class NavigationToolbar {
 
     public void move(int x, int y) {
         for (var button : buttons) {
-            button.setX(x);
-            button.setY(y);
-            x += button.getWidth() + GAP;
+            button.x = x;
+            button.y = y;
+            x += button.width + GAP;
         }
     }
 

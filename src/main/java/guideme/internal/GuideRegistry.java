@@ -1,5 +1,6 @@
 package guideme.internal;
 
+import guideme.internal.item.GuideItemDispatchModelLoader;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -7,7 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,11 @@ public class GuideRegistry {
     public static void registerStatic(MutableGuide guide) {
         if (guides.putIfAbsent(guide.getId(), guide) != null) {
             throw new IllegalStateException("There is already a Guide registered with id " + guide.getId());
+        }
+
+        if (GuideItemDispatchModelLoader.isModelLoaded() && guide.getItemSettings().itemModel().isPresent()) {
+            LOG.warn("Guide {} with model {} was registered too late! This may cause rendering issues.",
+                    guide.getId(), guide.getItemSettings().itemModel().get());
         }
 
         rebuildGuides();

@@ -1,17 +1,22 @@
 package guideme.siteexport;
 
 import java.nio.file.Path;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.level.ItemLike;
-import net.minecraft.world.level.material.Fluid;
+import net.minecraft.block.Block;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fluids.Fluid;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 @ApiStatus.NonExtendable
 public interface ResourceExporter {
-    default void referenceItem(ItemLike item) {
+    default void referenceBlock(Block block) {
+        referenceItem(new ItemStack(block));
+    }
+
+    default void referenceItem(Item item) {
         referenceItem(new ItemStack(item));
     }
 
@@ -47,5 +52,5 @@ public interface ResourceExporter {
      */
     ResourceLocation getPageSpecificResourceLocation(String suffix);
 
-    void referenceRecipe(Recipe<?> recipe);
+    void referenceRecipe(IRecipe recipe);
 }
