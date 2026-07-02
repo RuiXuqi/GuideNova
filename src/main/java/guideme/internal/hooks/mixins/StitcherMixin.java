@@ -1,22 +1,24 @@
 package guideme.internal.hooks.mixins;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import guideme.internal.atlas.GuiStitcher;
 import java.util.Arrays;
 import net.minecraft.client.renderer.texture.Stitcher;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Stitcher.class)
 public class StitcherMixin {
-    @Redirect(method = "doStitch", at = @At(value = "INVOKE", target = "Ljava/util/Arrays;sort([Ljava/lang/Object;)V"))
-    private void redirectSort(Object[] array) {
+    @WrapOperation(method = "doStitch", at = @At(value = "INVOKE", target = "Ljava/util/Arrays;sort([Ljava/lang/Object;)V"))
+    private void modifySort(Object[] array, Operation<Void> original) {
         if ((Object) this instanceof GuiStitcher) {
             Arrays.sort((Stitcher.Holder[]) array, GuiStitcher.HOLDER_COMPARATOR);
         } else {
-            Arrays.sort(array);
+            // Cast to (Object) to prevent Java from unrolling the array into varargs.
+            original.call((Object) array);
         }
     }
 
