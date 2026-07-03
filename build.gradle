@@ -33,6 +33,30 @@ setDefaultProperty 'enable_shadow', false, false
 setDefaultProperty 'minecraft_username', true, 'Dev'
 setDefaultProperty 'extra_jvm_args', false, ''
 
+///////////////////
+// Version Number
+ext.tag = System.getenv('TAG') ?: ""
+if (ext.tag) {
+    if (!ext.tag.startsWith("v")) {
+        throw new GradleException("Tags should start with v ${ext.tag}")
+    }
+
+    project.version = ext.tag.substring("v".length())
+} else {
+    // This essentially tries to implement delay expansion of the project version based on a value source to
+    // still support configuration caching.
+    project.version = providers.gradleProperty("version").orElse("").flatMap(version -> {
+        if (!version.isBlank()) {
+            return providers.provider { version }
+        }
+        return providers.of(ProjectVersionSource.class, spec -> {
+            spec.getParameters().getDefaultBranches().addAll("main", "1.12.2")
+        });
+    }).get()
+}
+
+def modVersion = providers.provider { project.version.toString() }
+
 group = propertyString('root_package')
 
 base {
@@ -128,13 +152,13 @@ sourceSets {
             javaSources {
                 property('mod_id', propertyString('mod_id'))
                 property('mod_name', propertyString('mod_name'))
-                property('mod_version', propertyString('mod_version'))
+                property('mod_version', modVersion)
                 property('package', "${mod_package}.internal")
             }
             resources {
                 property('mod_id', propertyString('mod_id'))
                 property('mod_name', propertyString('mod_name'))
-                property('mod_version', propertyString('mod_version'))
+                property('mod_version', modVersion)
                 property('mod_description', propertyString('mod_description'))
                 property('mod_authors', propertyStringList('mod_authors', ',').collect {it.strip()}.join('", "'))
                 property('mod_credits', propertyString('mod_credits'))
